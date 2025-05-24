@@ -42,62 +42,106 @@ def decrypt_aes_key_with_rsa(encrypted_key, private_key):
     )
     return decrypted_key
 
+# Global değişkenler
+server_running = False
+server_socket = None
+
 def start_server():
+    global server_running, server_socket
+    
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Port yeniden kullanımı için
     server_socket.bind(('0.0.0.0', 9999))
     server_socket.listen(5)
+    server_running = True
     print("Sunucu başlatıldı, bağlantı bekleniyor...")
     
     # RSA anahtar çifti oluştur
     private_key, public_key = generate_keys()
     
-    while True:
-        client_socket, address = server_socket.accept()
-        print(f"Bağlantı kabul edildi: {address}")
-        
-        
-        # İstemciye RSA public key gönderme
-        pem = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        )
-        client_socket.send(pem)
-        
-        # Şifrelenmiş AES anahtarını alma
-        encrypted_aes_key = client_socket.recv(256)
-        aes_key = decrypt_aes_key_with_rsa(encrypted_aes_key, private_key)
-        
-        # Şifrelenmiş dosyayı alma
-        encrypted_data = b''
-        while True:
-            chunk = client_socket.recv(4096)
-            if not chunk:
+    try:
+        while server_running:
+            try:
+                # Timeout ile accept işlemi
+                server_socket.settimeout(1.0)
+                client_socket, address = server_socket.accept()
+                print(f"Bağlantı kabul edildi: {address}")
+                
+                # İstemciye RSA public key gönderme
+                pem = public_key.public_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PublicFormat.SubjectPublicKeyInfo
+                )
+                client_socket.send(pem)
+                
+                # Şifrelenmiş AES anahtarını alma
+                encrypted_aes_key = client_socket.recv(256)
+                aes_key = decrypt_aes_key_with_rsa(encrypted_aes_key, private_key)
+                
+                # Şifrelenmiş dosyayı alma
+                encrypted_data = b''
+                while True:
+                    chunk = client_socket.recv(4096)
+                    if not chunk:
+                        break
+                    encrypted_data += chunk
+
+                print("Dosya alındı, şifre çözülüyor...")
+
+                # Şifre çözme
+                iv = encrypted_data[:16] 
+                ciphertext = encrypted_data[16:]
+
+                decryptor = Cipher(
+                    algorithms.AES(aes_key),
+                    modes.CBC(iv),
+                    backend=default_backend()
+                ).decryptor()
+
+                unpadder = padding.PKCS7(128).unpadder()
+
+                decrypted_padded = decryptor.update(ciphertext) + decryptor.finalize()
+                decrypted_data = unpadder.update(decrypted_padded) + unpadder.finalize()
+
+                # Dosyayı kaydetme
+                with open("received_file.txt", "wb") as f:
+                    f.write(decrypted_data)
+
+                print("Dosya başarıyla kaydedildi: received_file.txt")
+                client_socket.close()
+                
+            except socket.timeout:
+                # Timeout durumunda döngü devam eder, server_running kontrolü yapılır
+                continue
+            except socket.error as e:
+                if server_running:
+                    print(f"Socket hatası: {e}")
                 break
-            encrypted_data += chunk
+                
+    except Exception as e:
+        print(f"Sunucu hatası: {e}")
+    finally:
+        if server_socket:
+            server_socket.close()
+        print("Sunucu kapatıldı.")
 
-        print("Dosya alındı, şifre çözülüyor...")
-
-        # Şifre çözme
-        iv = encrypted_data[:16] 
-        ciphertext = encrypted_data[16:]
-
-        decryptor = Cipher(
-            algorithms.AES(aes_key),
-            modes.CBC(iv),
-            backend=default_backend()
-        ).decryptor()
-
-        unpadder = padding.PKCS7(128).unpadder()
-
-        decrypted_padded = decryptor.update(ciphertext) + decryptor.finalize()
-        decrypted_data = unpadder.update(decrypted_padded) + unpadder.finalize()
-
-        # Dosyayı kaydetme
-        with open("received_file.txt", "wb") as f:
-            f.write(decrypted_data)
-
-        print("Dosya başarıyla kaydedildi: received_file.txt")
-        client_socket.close()
+def stop_server():
+    """Sunucuyu güvenli bir şekilde durdurur"""
+    global server_running, server_socket
+    
+    if not server_running:
+        print("Sunucu zaten çalışmıyor.")
+        return
+    
+    print("Sunucu durduruluyor...")
+    server_running = False
+    
+    # Socket'i kapatma
+    if server_socket:
+        try:
+            server_socket.close()
+        except:
+            pass
 
 if __name__ == "__main__":
     start_server()
