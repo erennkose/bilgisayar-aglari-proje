@@ -105,6 +105,7 @@ if __name__ == "__main__":
 
 # 192.168.1.3 --> Server IP --> 192.168.56.1
 
+# python main.py client --file gonderen_dosya.txt --ip 192.168.56.1
 # python main.py analyze --analyze latency --ip 8.8.8.8
 # python main.py analyze --analyze bandwidth --ip 192.168.56.1
 # python main.py analyze --analyze packet_loss --loss 10
