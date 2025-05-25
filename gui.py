@@ -7,7 +7,7 @@ from client import start_client
 from server import start_server, stop_server, server_running, server_socket
 from network_analysis import measure_latency, run_iperf_client
 from security_analysis import packet_capture, analyze_encrypted_data, mitm_simulation, packet_injection_simulation
-from ip_header import send_fragmented_data
+from ip_header import send_fragmented_data, send_fragmented_data_scapy, validate_ip_options
 
 IPERF_PATH = "C:\\iperf\\iperf3.exe"
 CLUMSY_PATH = "C:\\Program Files\\Clumsy\\clumsy.exe"
@@ -17,7 +17,7 @@ class SecureTransferGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Güvenli Dosya Transfer Sistemi")
-        self.root.geometry("700x650")
+        self.root.geometry("850x1000")
 
         # Ana notebook (sekmeler)
         self.notebook = ttk.Notebook(root)
@@ -173,8 +173,62 @@ class SecureTransferGUI:
         tk.Button(file_inner_frame, text="Gözat", command=self.browse_file, width=8).pack(side=tk.RIGHT)
 
         # Gelişmiş ayarlar
-        advanced_frame = tk.LabelFrame(main_frame, text="Gelişmiş Ayarlar", font=("Arial", 10, "bold"))
+        advanced_frame = tk.LabelFrame(main_frame, text="Gelişmiş IP Ayarları", font=("Arial", 10, "bold"))
         advanced_frame.pack(fill=tk.X, pady=(0, 20))
+
+        # MTU ayarı (mevcut)
+        mtu_frame = tk.Frame(advanced_frame)
+        mtu_frame.pack(fill=tk.X, padx=10, pady=5)
+        tk.Label(mtu_frame, text="MTU Boyutu:", width=15, anchor='w').pack(side=tk.LEFT)
+        self.mtu_entry = tk.Entry(mtu_frame, width=20, font=("Arial", 10))
+        self.mtu_entry.insert(0, "1500")
+        self.mtu_entry.pack(side=tk.LEFT, padx=(10, 0))
+
+        # TTL ayarı
+        ttl_frame = tk.Frame(advanced_frame)
+        ttl_frame.pack(fill=tk.X, padx=10, pady=5)
+        tk.Label(ttl_frame, text="TTL Değeri:", width=15, anchor='w').pack(side=tk.LEFT)
+        self.ttl_entry = tk.Entry(ttl_frame, width=20, font=("Arial", 10))
+        self.ttl_entry.insert(0, "64")
+        self.ttl_entry.pack(side=tk.LEFT, padx=(10, 0))
+
+        # ToS ayarı
+        tos_frame = tk.Frame(advanced_frame)
+        tos_frame.pack(fill=tk.X, padx=10, pady=5)
+        tk.Label(tos_frame, text="ToS/DSCP:", width=15, anchor='w').pack(side=tk.LEFT)
+        self.tos_entry = tk.Entry(tos_frame, width=20, font=("Arial", 10))
+        self.tos_entry.insert(0, "0")
+        self.tos_entry.pack(side=tk.LEFT, padx=(10, 0))
+
+        # IP Flags seçimi
+        flags_frame = tk.Frame(advanced_frame)
+        flags_frame.pack(fill=tk.X, padx=10, pady=5)
+        tk.Label(flags_frame, text="IP Flags:", width=15, anchor='w').pack(side=tk.LEFT)
+        
+        flags_inner_frame = tk.Frame(flags_frame)
+        flags_inner_frame.pack(side=tk.LEFT, padx=(10, 0))
+        
+        self.df_flag_var = tk.BooleanVar()
+        self.mf_flag_var = tk.BooleanVar()
+        
+        tk.Checkbutton(flags_inner_frame, text="Don't Fragment", variable=self.df_flag_var).pack(side=tk.LEFT)
+        tk.Checkbutton(flags_inner_frame, text="More Fragments", variable=self.mf_flag_var).pack(side=tk.LEFT, padx=(10, 0))
+
+        # Kaynak IP ayarı (opsiyonel)
+        src_ip_frame = tk.Frame(advanced_frame)
+        src_ip_frame.pack(fill=tk.X, padx=10, pady=5)
+        tk.Label(src_ip_frame, text="Kaynak IP:", width=15, anchor='w').pack(side=tk.LEFT)
+        self.src_ip_entry = tk.Entry(src_ip_frame, width=20, font=("Arial", 10))
+        self.src_ip_entry.insert(0, "auto")  # otomatik IP seçimi için
+        self.src_ip_entry.pack(side=tk.LEFT, padx=(10, 0))
+
+        # Zorla parçalama seçeneği
+        force_frag_frame = tk.Frame(advanced_frame)
+        force_frag_frame.pack(fill=tk.X, padx=10, pady=5)
+        self.force_fragment_var = tk.BooleanVar()
+        tk.Checkbutton(force_frag_frame, text="Zorla Parçalama Yap", 
+                    variable=self.force_fragment_var).pack(anchor='w')
+        
 
         # MTU ayarı
         mtu_frame = tk.Frame(advanced_frame)
@@ -341,13 +395,19 @@ class SecureTransferGUI:
         threading.Thread(target=send, daemon=True).start()
 
     def send_with_ip_header(self):
-        """IP header ile dosya gönderimi"""
+        """IP header ile dosya gönderimi - Gelişmiş parametrelerle"""
         ip = self.client_ip_entry.get().strip()
         file_path = self.file_entry.get().strip()
         port = self.client_port_entry.get().strip()
         mtu = self.mtu_entry.get().strip()
         protocol = self.client_protocol_var.get()
+        
+        # Yeni parametreler
+        ttl = self.ttl_entry.get().strip()
+        tos = self.tos_entry.get().strip()
+        src_ip = self.src_ip_entry.get().strip()
 
+        # Validasyon
         if not ip or not file_path:
             messagebox.showerror("Hata", "Lütfen IP adresi ve dosya seçin.")
             return
@@ -357,30 +417,79 @@ class SecureTransferGUI:
         if not mtu.isdigit():
             messagebox.showerror("Hata", "Geçerli bir MTU değeri girin.")
             return
+        if not ttl.isdigit() or not (1 <= int(ttl) <= 255):
+            messagebox.showerror("Hata", "TTL değeri 1-255 arasında olmalıdır.")
+            return
+        if not tos.isdigit() or not (0 <= int(tos) <= 255):
+            messagebox.showerror("Hata", "ToS değeri 0-255 arasında olmalıdır.")
+            return
         if not os.path.exists(file_path):
             messagebox.showerror("Hata", "Dosya bulunamadı.")
             return
 
         port = int(port)
         mtu = int(mtu)
+        ttl = int(ttl)
+        tos = int(tos)
+        
+        # IP flags hesaplama
+        flags = 0
+        if self.df_flag_var.get():
+            flags |= 2  # Don't Fragment
+        if self.mf_flag_var.get():
+            flags |= 4  # More Fragments
+        
+        # Kaynak IP kontrolü
+        if src_ip.lower() == "auto" or not src_ip:
+            src_ip = None  # Otomatik IP seçimi için
 
         def send_file():
             try:
                 with open(file_path, 'rb') as f:
                     data = f.read()
-                self.log_message(f"[IP Header - {protocol.upper()}] Dosya gönderiliyor...")
-                self.log_message(f"Hedef: {ip}:{port}, MTU: {mtu}, Protokol: {protocol.upper()}")
-                self.log_message(f"Dosya boyutu: {len(data)} byte")
                 
-                success = send_fragmented_data(None, ip, data, port, mtu, protocol)
+                self.log_message(f"[IP Header - {protocol.upper()}] Dosya gönderiliyor...")
+                self.log_message(f"Hedef: {ip}:{port}")
+                self.log_message(f"MTU: {mtu}, TTL: {ttl}, ToS: {tos}")
+                self.log_message(f"Flags: {self.get_flag_description(flags)}")
+                self.log_message(f"Dosya boyutu: {len(data)} byte")
+                self.log_message(f"Zorla parçalama: {'Evet' if self.force_fragment_var.get() else 'Hayır'}")
+                
+                # ip_header.py'deki güncellenmiş fonksiyonu çağır
+                success = send_fragmented_data_scapy(
+                    src_ip=src_ip,
+                    dst_ip=ip,
+                    data=data,
+                    port=port,
+                    mtu=mtu,
+                    protocol=protocol,
+                    ttl=ttl,
+                    flags=flags,
+                    tos=tos,
+                    force_fragment=self.force_fragment_var.get()
+                )
+                
                 if success:
                     self.log_message("[IP Header] Dosya başarıyla gönderildi!")
                 else:
                     self.log_message("[IP Header] Dosya gönderimi başarısız!")
+                    
             except Exception as e:
                 self.log_message(f"[IP Header] Hata: {e}")
 
         threading.Thread(target=send_file, daemon=True).start()
+
+    def get_flag_description(self, flag_value):
+        """Flag değerinin açıklamasını döndür"""
+        descriptions = []
+        if flag_value & 1:
+            descriptions.append("Reserved")
+        if flag_value & 2:
+            descriptions.append("Don't Fragment")
+        if flag_value & 4:
+            descriptions.append("More Fragments")
+        
+        return " | ".join(descriptions) if descriptions else "Flags Yok"
 
     # Analiz araçları metodları
     def run_latency_analysis(self):

@@ -1,13 +1,14 @@
-# ip_header.py - IP başlıklarını işleme
+# ip_header.py - Geliştirilmiş IP başlıklarını işleme
 from scapy.all import IP, TCP, UDP, Raw, sr1, send
 import random
 import socket
 import platform
 
-def create_ip_packet(src_ip, dst_ip, ttl=64, id=None, flags=0, frag=0):
+def create_ip_packet(src_ip, dst_ip, ttl=64, id=None, flags=0, frag=0, tos=0):
     """
     Düşük seviyeli IP paketi oluşturma
     flags: 0 = No flags, 1 = Reserved, 2 = Don't Fragment, 4 = More Fragments
+    tos: Type of Service (DSCP + ECN)
     """
     if id is None:
         id = random.randint(1000, 65535)
@@ -18,7 +19,8 @@ def create_ip_packet(src_ip, dst_ip, ttl=64, id=None, flags=0, frag=0):
         ttl=ttl,
         id=id,
         flags=flags,
-        frag=frag
+        frag=frag,
+        tos=tos
     )
     
     return ip_packet
@@ -47,7 +49,7 @@ def calculate_ip_checksum(packet):
     del packet.chksum
     return packet.build()
 
-def send_tcp_data(dst_ip, data, port=9999, mtu=1500):
+def send_tcp_data(dst_ip, data, port=9999, mtu=1500, **ip_options):
     """
     TCP ile veri gönderme (Windows uyumlu)
     """
@@ -69,9 +71,9 @@ def send_tcp_data(dst_ip, data, port=9999, mtu=1500):
             return False
     else:
         # Linux/Unix için Scapy kullan
-        return send_fragmented_data_scapy(None, dst_ip, data, port, mtu, protocol="tcp")
+        return send_fragmented_data_scapy(None, dst_ip, data, port, mtu, protocol="tcp", **ip_options)
 
-def send_udp_data(dst_ip, data, port=9999, mtu=1500):
+def send_udp_data(dst_ip, data, port=9999, mtu=1500, **ip_options):
     """
     UDP ile veri gönderme (Windows uyumlu)
     """
@@ -92,31 +94,70 @@ def send_udp_data(dst_ip, data, port=9999, mtu=1500):
             return False
     else:
         # Linux/Unix için Scapy kullan
-        return send_fragmented_data_scapy(None, dst_ip, data, port, mtu, protocol="udp")
+        return send_fragmented_data_scapy(None, dst_ip, data, port, mtu, protocol="udp", **ip_options)
 
-def send_fragmented_data(src_ip, dst_ip, data, port=9999, mtu=1500, protocol="tcp"):
+def send_fragmented_data(src_ip, dst_ip, data, port=9999, mtu=1500, protocol="tcp", **ip_options):
     """
-    Veriyi parçalayarak gönderme (TCP veya UDP)
+    Veriyi parçalayarak gönderme (TCP veya UDP) - IP seçenekleri ile
+    ip_options: ttl, flags, tos, packet_id gibi ek parametreler
     """
     if protocol.lower() == "tcp":
-        return send_tcp_data(dst_ip, data, port, mtu)
+        return send_tcp_data(dst_ip, data, port, mtu, **ip_options)
     elif protocol.lower() == "udp":
-        return send_udp_data(dst_ip, data, port, mtu)
+        return send_udp_data(dst_ip, data, port, mtu, **ip_options)
     else:
         print(f"Desteklenmeyen protokol: {protocol}")
         return False
 
-def send_fragmented_data_scapy(src_ip, dst_ip, data, port=9999, mtu=1500, protocol="tcp"):
+def send_fragmented_data_scapy(src_ip, dst_ip, data, port=9999, mtu=1500, protocol="tcp", 
+                              ttl=64, flags=0, tos=0, packet_id=None, force_fragment=False):
     """
     Scapy kullanarak parçalanmış veri gönderme (Linux/Unix için)
+    
+    Parametreler:
+    - ttl: Time to Live değeri
+    - flags: IP flags (0=Normal, 2=Don't Fragment, 4=More Fragments)
+    - tos: Type of Service (QoS için)
+    - packet_id: Paket ID (None ise otomatik)
+    - force_fragment: Zorla parçalama yapılsın mı
     """
+    if packet_id is None:
+        packet_id = random.randint(1000, 65535)
+    
+    # Don't Fragment flag kontrolü
+    if flags & 2 and not force_fragment:  # DF flag set ve zorla parçalama yok
+        # Tek paket olarak gönder
+        ip_packet = create_ip_packet(
+            src_ip=src_ip,
+            dst_ip=dst_ip,
+            ttl=ttl,
+            id=packet_id,
+            flags=flags,
+            frag=0,
+            tos=tos
+        )
+        
+        if protocol.lower() == "tcp":
+            transport_packet = TCP(dport=port, sport=random.randint(1024, 65535))
+        elif protocol.lower() == "udp":
+            transport_packet = UDP(dport=port, sport=random.randint(1024, 65535))
+        else:
+            print(f"Desteklenmeyen protokol: {protocol}")
+            return False
+        
+        packet = ip_packet / transport_packet / Raw(load=data)
+        send(packet)
+        return True
+    
+    # Parçalama gerekli
     fragments = fragment_data(data, mtu)
     total_fragments = len(fragments)
-    packet_id = random.randint(1000, 65535)
     
     for i, fragment in enumerate(fragments):
-        # Son parça değilse "More Fragments" bayrağını ayarla
-        flags = 1 if i < total_fragments - 1 else 0
+        # Fragment flags hesaplama
+        fragment_flags = flags
+        if i < total_fragments - 1:  # Son parça değilse More Fragments flag ekle
+            fragment_flags |= 1
         
         # Fragment offset hesaplama (8 byte'lık birimlerle ölçülür)
         frag_offset = i * (mtu - 20) // 8
@@ -124,10 +165,11 @@ def send_fragmented_data_scapy(src_ip, dst_ip, data, port=9999, mtu=1500, protoc
         ip_packet = create_ip_packet(
             src_ip=src_ip,
             dst_ip=dst_ip,
-            ttl=64,
+            ttl=ttl,
             id=packet_id,  # Tüm parçalar için aynı ID
-            flags=flags,
-            frag=frag_offset
+            flags=fragment_flags,
+            frag=frag_offset,
+            tos=tos
         )
         
         # Protokol türüne göre paket oluştur
@@ -141,16 +183,16 @@ def send_fragmented_data_scapy(src_ip, dst_ip, data, port=9999, mtu=1500, protoc
         
         # Paketi hesapla ve gönder
         packet = ip_packet / transport_packet / Raw(load=fragment)
-        calculate_ip_checksum(packet)
         send(packet)
     
     return True
 
-def create_custom_packet(src_ip, dst_ip, src_port, dst_port, data, protocol="tcp"):
+def create_custom_packet(src_ip, dst_ip, src_port, dst_port, data, protocol="tcp", 
+                        ttl=64, flags=0, tos=0, packet_id=None):
     """
-    Özel paket oluşturma
+    Özel paket oluşturma - tüm IP parametreleri ile
     """
-    ip_packet = create_ip_packet(src_ip, dst_ip)
+    ip_packet = create_ip_packet(src_ip, dst_ip, ttl=ttl, id=packet_id, flags=flags, tos=tos)
     
     if protocol.lower() == "tcp":
         transport_packet = TCP(sport=src_port, dport=dst_port)
@@ -161,3 +203,34 @@ def create_custom_packet(src_ip, dst_ip, src_port, dst_port, data, protocol="tcp
     
     packet = ip_packet / transport_packet / Raw(load=data)
     return packet
+
+def get_flag_description(flag_value):
+    """
+    Flag değerinin açıklamasını döndür
+    """
+    descriptions = []
+    if flag_value & 1:
+        descriptions.append("Reserved")
+    if flag_value & 2:
+        descriptions.append("Don't Fragment")
+    if flag_value & 4:
+        descriptions.append("More Fragments")
+    
+    return " | ".join(descriptions) if descriptions else "No Flags"
+
+def validate_ip_options(ttl=64, flags=0, tos=0):
+    """
+    IP seçeneklerini doğrula
+    """
+    errors = []
+    
+    if not (1 <= ttl <= 255):
+        errors.append("TTL değeri 1-255 arasında olmalıdır")
+    
+    if not (0 <= flags <= 7):
+        errors.append("Flags değeri 0-7 arasında olmalıdır")
+    
+    if not (0 <= tos <= 255):
+        errors.append("ToS değeri 0-255 arasında olmalıdır")
+    
+    return errors
