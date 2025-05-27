@@ -7,7 +7,13 @@ from client import start_client
 from server import start_server, stop_server, server_running, server_socket
 from network_analysis import measure_latency, run_iperf_client
 from security_analysis import SecurityAnalyzer
-from ip_header import send_fragmented_data, send_fragmented_data_scapy, validate_ip_options
+from ip_header import (
+    send_fragmented_data_scapy,
+    monitor_network_errors, 
+    test_checksum_manipulation,
+    detect_transmission_errors,
+    validate_ip_checksum
+)
 
 IPERF_PATH = "C:\\iperf\\iperf3.exe"
 CLUMSY_PATH = "C:\\Program Files\\Clumsy\\clumsy.exe"
@@ -230,15 +236,6 @@ class SecureTransferGUI:
         self.force_fragment_var = tk.BooleanVar()
         tk.Checkbutton(force_frag_frame, text="Zorla Parçalama Yap", 
                     variable=self.force_fragment_var).pack(anchor='w')
-        
-
-        # MTU ayarı
-        mtu_frame = tk.Frame(advanced_frame)
-        mtu_frame.pack(fill=tk.X, padx=10, pady=10)
-        tk.Label(mtu_frame, text="MTU Boyutu:", width=15, anchor='w').pack(side=tk.LEFT)
-        self.mtu_entry = tk.Entry(mtu_frame, width=20, font=("Arial", 10))
-        self.mtu_entry.insert(0, "1500")
-        self.mtu_entry.pack(side=tk.LEFT, padx=(10, 0))
 
         # Gönderim butonları
         button_frame = tk.Frame(main_frame)
@@ -309,6 +306,14 @@ class SecureTransferGUI:
                 width=15, bg="lightgreen").pack(side=tk.LEFT, padx=(0, 10))
         tk.Button(security_buttons_frame3, text="Paket Yakalama", command=self.start_packet_capture,
                 width=18, bg="lightcyan").pack(side=tk.LEFT)
+        
+        security_buttons_frame4 = tk.Frame(security_frame)
+        security_buttons_frame4.pack(padx=10, pady=5)
+
+        tk.Button(security_buttons_frame4, text="Checksum Analizi", command=self.run_checksum_analysis,
+                width=15, bg="lightyellow").pack(side=tk.LEFT, padx=(0, 10))
+        tk.Button(security_buttons_frame4, text="Hata Tespiti", command=self.run_error_detection,
+                width=18, bg="lightyellow").pack(side=tk.LEFT)
 
         # Dış araçlar
         external_frame = tk.LabelFrame(main_frame, text="Dış Araçlar", font=("Arial", 10, "bold"))
@@ -490,6 +495,67 @@ class SecureTransferGUI:
                 self.log_message(f"[IP Header] Hata: {e}")
 
         threading.Thread(target=send_file, daemon=True).start()
+
+    def run_checksum_analysis(self):
+        """IP checksum analizi ve test"""
+        def analyze():
+            self.log_message("[Checksum] IP checksum analiz ve test başlatılıyor...")
+            try:
+                # Checksum manipülasyon testi
+                self.log_message("Checksum manipülasyon testi yapılıyor...")
+                normal_packet, corrupted_packet = test_checksum_manipulation()
+                
+                # Sonuçları logla
+                self.log_message(f"Normal paket checksum: {hex(normal_packet.chksum)}")
+                self.log_message(f"Bozuk paket checksum: {hex(corrupted_packet.chksum)}")
+                
+                # Doğrulama sonuçları
+                is_valid_normal, calc_normal, recv_normal = validate_ip_checksum(normal_packet)
+                is_valid_corrupted, calc_corrupted, recv_corrupted = validate_ip_checksum(corrupted_packet)
+                
+                self.log_message(f"Normal paket geçerli: {'✅ EVET' if is_valid_normal else '❌ HAYIR'}")
+                self.log_message(f"Bozuk paket geçerli: {'✅ EVET' if is_valid_corrupted else '❌ HAYIR'}")
+                
+                self.log_message("[Checksum] Analiz tamamlandı.")
+                
+            except Exception as e:
+                self.log_message(f"[Checksum] Hata: {e}")
+        
+        threading.Thread(target=analyze, daemon=True).start()
+
+    def run_error_detection(self):
+        """Ağ hata tespiti"""
+        def detect():
+            self.log_message("[Hata Tespiti] Ağ trafiği izleniyor...")
+            try:
+                # Windows için interface belirleme
+                interface = None  # Otomatik seçim
+                
+                self.log_message("50 paket yakalanacak ve checksum hataları aranacak...")
+                self.log_message("Bu işlem birkaç dakika sürebilir...")
+                
+                # Hata tespiti başlat
+                error_packets = monitor_network_errors(
+                    interface=interface, 
+                    count=50, 
+                    filter_str="ip"
+                )
+                
+                # Sonuçları özetle
+                if error_packets:
+                    self.log_message(f"⚠️ {len(error_packets)} checksum hatası tespit edildi!")
+                    for i, error in enumerate(error_packets[:5]):  # İlk 5 hatayı göster
+                        self.log_message(f"  {i+1}. {error['src_ip']} -> {error['dst_ip']} "
+                                    f"(Hesaplanan: {error['calculated_checksum']}, "
+                                    f"Alınan: {error['received_checksum']})")
+                else:
+                    self.log_message("✅ Checksum hatası tespit edilmedi.")
+                    
+            except Exception as e:
+                self.log_message(f"[Hata Tespiti] Hata: {e}")
+                self.log_message("Not: Bu özellik için yönetici yetkileri gerekebilir.")
+        
+        threading.Thread(target=detect, daemon=True).start()
 
     def get_flag_description(self, flag_value):
         """Flag değerinin açıklamasını döndür"""

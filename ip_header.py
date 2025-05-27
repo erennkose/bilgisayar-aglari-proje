@@ -1,8 +1,9 @@
 # ip_header.py - Geliştirilmiş IP başlıklarını işleme
-from scapy.all import IP, TCP, UDP, Raw, sr1, send
+from scapy.all import IP, TCP, UDP, Raw, sr1, send, sniff
 import random
 import socket
 import platform
+import struct
 
 def create_ip_packet(src_ip, dst_ip, ttl=64, id=None, flags=0, frag=0, tos=0):
     """
@@ -234,3 +235,180 @@ def validate_ip_options(ttl=64, flags=0, tos=0):
         errors.append("ToS değeri 0-255 arasında olmalıdır")
     
     return errors
+
+def calculate_ip_checksum_manual(ip_header_bytes):
+    """
+    Manuel IP checksum hesaplama (RFC 791)
+    ip_header_bytes: IP başlığının byte array'i
+    """
+    # Checksum alanını sıfırla (10-11. byte'lar)
+    header = bytearray(ip_header_bytes)
+    header[10] = 0  # Checksum MSB
+    header[11] = 0  # Checksum LSB
+    
+    # 16-bit kelimeler halinde topla
+    checksum = 0
+    for i in range(0, len(header), 2):
+        if i + 1 < len(header):
+            word = (header[i] << 8) + header[i + 1]
+        else:
+            word = header[i] << 8
+        checksum += word
+    
+    # Carry bitlerini ekle
+    while checksum > 0xFFFF:
+        checksum = (checksum & 0xFFFF) + (checksum >> 16)
+    
+    # One's complement al
+    checksum = ~checksum & 0xFFFF
+    return checksum
+
+def validate_ip_checksum(packet):
+    """
+    IP paketinin checksum'ını doğrula
+    Returns: (is_valid, calculated_checksum, received_checksum)
+    """
+    if not packet.haslayer(IP):
+        return False, None, None
+    
+    ip_layer = packet[IP]
+    received_checksum = ip_layer.chksum
+    
+    # Paketi bytes'a çevir ve header'ı çıkar
+    packet_bytes = bytes(packet)
+    ip_header_length = (packet_bytes[0] & 0x0F) * 4  # IHL * 4
+    ip_header = packet_bytes[:ip_header_length]
+    
+    # Checksum hesapla
+    calculated_checksum = calculate_ip_checksum_manual(ip_header)
+    
+    # Doğrula
+    is_valid = (calculated_checksum == received_checksum)
+    
+    return is_valid, calculated_checksum, received_checksum
+
+def create_ip_packet_with_custom_checksum(src_ip, dst_ip, ttl=64, id=None, 
+                                        flags=0, frag=0, tos=0, custom_checksum=None):
+    """
+    Manuel checksum ile IP paketi oluşturma
+    custom_checksum: None ise otomatik hesaplar, değer verilirse o kullanılır
+    """
+    if id is None:
+        id = random.randint(1000, 65535)
+    
+    # IP paketi oluştur
+    ip_packet = IP(
+        src=src_ip,
+        dst=dst_ip,
+        ttl=ttl,
+        id=id,
+        flags=flags,
+        frag=frag,
+        tos=tos
+    )
+    
+    if custom_checksum is not None:
+        # Manuel checksum ata
+        ip_packet.chksum = custom_checksum
+    else:
+        # Otomatik checksum hesaplat
+        ip_packet = IP(bytes(ip_packet))  # Rebuild ile checksum hesaplanır
+    
+    return ip_packet
+
+def detect_transmission_errors(packet_list):
+    """
+    Paket listesindeki transmission errorları tespit et
+    Returns: (total_packets, error_count, error_details)
+    """
+    total_packets = len(packet_list)
+    errors = []
+    error_count = 0
+    
+    for i, packet in enumerate(packet_list):
+        if packet.haslayer(IP):
+            is_valid, calc_checksum, recv_checksum = validate_ip_checksum(packet)
+            
+            if not is_valid:
+                error_count += 1
+                errors.append({
+                    'packet_index': i,
+                    'src_ip': packet[IP].src,
+                    'dst_ip': packet[IP].dst,
+                    'calculated_checksum': hex(calc_checksum) if calc_checksum else None,
+                    'received_checksum': hex(recv_checksum) if recv_checksum else None,
+                    'error_type': 'checksum_mismatch'
+                })
+    
+    return total_packets, error_count, errors
+
+def monitor_network_errors(interface=None, count=100, filter_str="ip"):
+    """
+    Ağ trafiğini izle ve checksum hatalarını tespit et
+    """
+    print(f"Ağ trafiği izleniyor... (Paket sayısı: {count})")
+    print("Checksum hataları aranıyor...\n")
+    
+    error_packets = []
+    
+    def packet_handler(packet):
+        if packet.haslayer(IP):
+            is_valid, calc_checksum, recv_checksum = validate_ip_checksum(packet)
+            
+            if not is_valid:
+                error_info = {
+                    'timestamp': packet.time,
+                    'src_ip': packet[IP].src,
+                    'dst_ip': packet[IP].dst,
+                    'calculated_checksum': hex(calc_checksum) if calc_checksum else "N/A",
+                    'received_checksum': hex(recv_checksum) if recv_checksum else "N/A",
+                    'packet_size': len(packet)
+                }
+                error_packets.append(error_info)
+                
+                print(f"❌ CHECKSUM HATASI:")
+                print(f"   Kaynak IP: {error_info['src_ip']}")
+                print(f"   Hedef IP: {error_info['dst_ip']}")
+                print(f"   Hesaplanan: {error_info['calculated_checksum']}")
+                print(f"   Alınan: {error_info['received_checksum']}")
+                print(f"   Paket boyutu: {error_info['packet_size']}")
+                print("-" * 50)
+    
+    # Paketleri yakala ve analiz et
+    try:
+        sniff(iface=interface, count=count, filter=filter_str, prn=packet_handler)
+    except Exception as e:
+        print(f"Paket yakalama hatası: {e}")
+    
+    # Sonuçları özetle
+    print(f"\n📊 ÖZET:")
+    print(f"Toplam checksum hatası: {len(error_packets)}")
+    print(f"Hata oranı: {(len(error_packets)/count)*100:.2f}%")
+    
+    return error_packets
+
+def test_checksum_manipulation():
+    """
+    Checksum manipülasyonu test fonksiyonu
+    """
+    print("🧪 Checksum Manipülasyon Testi\n")
+    
+    # Normal paket oluştur
+    normal_packet = create_ip_packet_with_custom_checksum("192.168.1.1", "192.168.1.2")
+    print(f"✅ Normal paket checksum: {hex(normal_packet.chksum)}")
+    
+    # Bozuk checksum ile paket oluştur
+    corrupted_packet = create_ip_packet_with_custom_checksum(
+        "192.168.1.1", "192.168.1.2", custom_checksum=0xDEAD
+    )
+    print(f"❌ Bozuk paket checksum: {hex(corrupted_packet.chksum)}")
+    
+    # Doğrulama yap
+    is_valid_normal, calc_normal, recv_normal = validate_ip_checksum(normal_packet)
+    is_valid_corrupted, calc_corrupted, recv_corrupted = validate_ip_checksum(corrupted_packet)
+    
+    print(f"\nDoğrulama Sonuçları:")
+    print(f"Normal paket geçerli: {is_valid_normal}")
+    print(f"Bozuk paket geçerli: {is_valid_corrupted}")
+    
+    return normal_packet, corrupted_packet
