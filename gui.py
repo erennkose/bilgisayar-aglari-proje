@@ -6,7 +6,7 @@ import subprocess
 from client import start_client
 from server import start_server, stop_server, server_running, server_socket
 from network_analysis import measure_latency, run_iperf_client
-from security_analysis import packet_capture, analyze_encrypted_data, mitm_simulation, packet_injection_simulation
+from security_analysis import SecurityAnalyzer
 from ip_header import send_fragmented_data, send_fragmented_data_scapy, validate_ip_options
 
 IPERF_PATH = "C:\\iperf\\iperf3.exe"
@@ -22,6 +22,8 @@ class SecureTransferGUI:
         # Ana notebook (sekmeler)
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        self.security_analyzer = SecurityAnalyzer()
 
         # Sekmeler
         self.server_frame = ttk.Frame(self.notebook)
@@ -288,15 +290,25 @@ class SecureTransferGUI:
         security_buttons_frame1.pack(padx=10, pady=5)
         
         tk.Button(security_buttons_frame1, text="Entropi Analizi", command=self.run_entropy_analysis,
-                 width=15, bg="lightyellow").pack(side=tk.LEFT, padx=(0, 10))
+                width=15, bg="lightyellow").pack(side=tk.LEFT, padx=(0, 10))
         tk.Button(security_buttons_frame1, text="MITM Simülasyonu", command=self.run_mitm_simulation,
-                 width=18, bg="lightyellow").pack(side=tk.LEFT)
+                width=18, bg="lightyellow").pack(side=tk.LEFT)
         
         security_buttons_frame2 = tk.Frame(security_frame)
         security_buttons_frame2.pack(padx=10, pady=5)
         
         tk.Button(security_buttons_frame2, text="Paket Enjeksiyonu", command=self.run_packet_injection,
-                 width=15, bg="lightyellow").pack()
+                width=15, bg="lightyellow").pack(side=tk.LEFT, padx=(0, 10))
+        tk.Button(security_buttons_frame2, text="Protokol Karşılaştır", command=self.compare_protocols,
+                width=18, bg="lightyellow").pack(side=tk.LEFT)
+        
+        security_buttons_frame3 = tk.Frame(security_frame)
+        security_buttons_frame3.pack(padx=10, pady=5)
+        
+        tk.Button(security_buttons_frame3, text="Kapsamlı Rapor", command=self.generate_security_report,
+                width=15, bg="lightgreen").pack(side=tk.LEFT, padx=(0, 10))
+        tk.Button(security_buttons_frame3, text="Paket Yakalama", command=self.start_packet_capture,
+                width=18, bg="lightcyan").pack(side=tk.LEFT)
 
         # Dış araçlar
         external_frame = tk.LabelFrame(main_frame, text="Dış Araçlar", font=("Arial", 10, "bold"))
@@ -344,7 +356,7 @@ class SecureTransferGUI:
                 self.log_message(f"[Sunucu - {protocol.upper()}] Başlatılıyor: {ip}:{port}")
                 # Sunucu fonksiyonunu IP ve port parametreleriyle çağırın
                 # Not: server.py dosyanızdaki start_server fonksiyonunu güncellemek gerekebilir
-                start_server()  # Burayı start_server(ip, port) olarak güncelleyin
+                start_server(ip, port, protocol)  # Burayı start_server(ip, port) olarak güncelleyin
                 
             except Exception as e:
                 self.log_message(f"[Sunucu] Hata: {e}")
@@ -383,15 +395,15 @@ class SecureTransferGUI:
             return
 
         port = int(port)
-        
+            
         def send():
             try:
                 self.log_message(f"[İstemci - {protocol.upper()}] Dosya gönderiliyor -> {ip}:{port}")
-                start_client((ip, port), file_path)
+                start_client((ip, port), file_path, protocol)  # ← Sadece bu satır değişti
                 self.log_message("[İstemci] Dosya başarıyla gönderildi!")
             except Exception as e:
                 self.log_message(f"[İstemci] Hata: {e}")
-        
+    
         threading.Thread(target=send, daemon=True).start()
 
     def send_with_ip_header(self):
@@ -535,7 +547,7 @@ class SecureTransferGUI:
         threading.Thread(target=analyze, daemon=True).start()
 
     def run_entropy_analysis(self):
-        """Entropi analizi"""
+        """Gelişmiş entropi analizi"""
         ip = self.target_ip_entry.get().strip()
         if not ip:
             messagebox.showerror("Hata", "Lütfen hedef IP girin.")
@@ -543,42 +555,180 @@ class SecureTransferGUI:
         
         def analyze():
             self.log_message(f"[Entropi] {ip} adresine ait veri analiz ediliyor...")
-            packets = packet_capture(interface="Ethernet", filter_str=f"host {ip}", count=30)
-            entropy = analyze_encrypted_data(packets)
-            self.log_message(f"Ortalama Entropi: {entropy:.4f}")
+            try:
+                # Paket yakalama simülasyonu (Windows için)
+                self.log_message("[Entropi] Paket yakalama simüle ediliyor...")
+                packets = self.security_analyzer.packet_capture("Ethernet", f"host {ip}", count=30)
+                
+                # Entropi analizi
+                results = self.security_analyzer.analyze_encrypted_data(packets)
+                
+                self.log_message(f"Ortalama Entropi: {results['entropy']:.4f}")
+                self.log_message(f"Şifreleme Durumu: {'ŞİFRELİ' if results['is_encrypted'] else 'ŞİFRELENMEMİŞ'}")
+                
+                # Protokol dağılımı
+                for protocol, count in results['protocols'].items():
+                    if count > 0:
+                        self.log_message(f"{protocol}: {count} paket")
+                        
+            except Exception as e:
+                self.log_message(f"[Entropi] Hata: {e}")
         
         threading.Thread(target=analyze, daemon=True).start()
 
     def run_mitm_simulation(self):
-        """MITM simülasyonu"""
+        """Gelişmiş MITM simülasyonu"""
         victim_ip = self.target_ip_entry.get().strip()
         if not victim_ip:
             messagebox.showerror("Hata", "Lütfen hedef (kurban) IP girin.")
             return
         
         def simulate():
-            self.log_message(f"[MITM] {victim_ip} adresine karşı MITM simülasyonu başlatılıyor...")
-            packets = mitm_simulation(victim_ip, "192.168.1.1", interface="Ethernet")
-            self.log_message(f"Yakalanan paket sayısı: {len(packets)}")
+            self.log_message(f"[MITM] {victim_ip} adresine karşı MITM tespiti başlatılıyor...")
+            try:
+                results = self.security_analyzer.mitm_simulation(victim_ip, "192.168.1.1", interface="Ethernet")
+                
+                # Sonuçları logla
+                self.log_message(f"ARP Anomalileri: {'TESPIT EDİLDİ' if results['arp_table_anomalies'] else 'Normal'}")
+                self.log_message(f"Sertifika Doğrulama: {'BAŞARISIZ' if results['certificate_validation'] else 'Başarılı'}")
+                self.log_message(f"Trafik Anomalileri: {'TESPIT EDİLDİ' if results['traffic_patterns'] else 'Normal'}")
+                
+                if results['mitm_detected']:
+                    self.log_message("⚠️ MITM SALDIRISI TESPİT EDİLDİ!")
+                else:
+                    self.log_message("✅ MITM tespiti: Güvenli")
+                    
+            except Exception as e:
+                self.log_message(f"[MITM] Hata: {e}")
         
         threading.Thread(target=simulate, daemon=True).start()
 
     def run_packet_injection(self):
-        """Paket enjeksiyonu"""
+        """Paket enjeksiyonu tespiti"""
         ip = self.target_ip_entry.get().strip()
         if not ip:
             messagebox.showerror("Hata", "Lütfen hedef IP girin.")
             return
         
-        def inject():
-            success = packet_injection_simulation(ip, 80)
-            if success:
-                self.log_message("[Enjeksiyon] Sahte HTTP isteği başarıyla enjekte edildi.")
-            else:
-                self.log_message("[Enjeksiyon] Paket enjeksiyonu başarısız oldu.")
+        def detect():
+            self.log_message(f"[Enjeksiyon] {ip} adresine paket enjeksiyonu tespiti...")
+            try:
+                results = self.security_analyzer.packet_injection_detection(ip, 80)
+                
+                # Tespit sonuçlarını logla
+                detection_count = sum(results.values())
+                self.log_message(f"TCP Sequence Analizi: {'ŞÜPHELI' if results['sequence_analysis'] else 'NORMAL'}")
+                self.log_message(f"Checksum Doğrulama: {'ŞÜPHELI' if results['checksum_validation'] else 'NORMAL'}")
+                self.log_message(f"Rate Limiting: {'ŞÜPHELI' if results['rate_limiting'] else 'NORMAL'}")
+                self.log_message(f"Payload Analizi: {'ŞÜPHELI' if results['payload_analysis'] else 'NORMAL'}")
+                
+                if detection_count > 0:
+                    self.log_message(f"⚠️ {detection_count} farklı tespit metodu şüpheli aktivite buldu!")
+                else:
+                    self.log_message("✅ Paket enjeksiyonu tespiti: Güvenli")
+                    
+            except Exception as e:
+                self.log_message(f"[Enjeksiyon] Hata: {e}")
         
-        threading.Thread(target=inject, daemon=True).start()
+        threading.Thread(target=detect, daemon=True).start()
 
+    def compare_protocols(self):
+        """Protokol karşılaştırması"""
+        def compare():
+            self.log_message("[Protokol] Güvenlik protokolleri karşılaştırılıyor...")
+            try:
+                protocols = self.security_analyzer.compare_security_protocols()
+                
+                self.log_message("=== GÜVENLİK PROTOKOLLERİ KARŞILAŞTIRMASI ===")
+                
+                # Sadece temel bilgileri logla
+                for protocol_name, details in protocols.items():
+                    self.log_message(f"{protocol_name}:")
+                    self.log_message(f"  Güvenlik Seviyesi: {details['security_level']}")
+                    self.log_message(f"  Şifreleme: {details['encryption']}")
+                    self.log_message(f"  Kullanım Alanı: {details['use_case']}")
+                    self.log_message("")
+                
+                self.log_message("Detaylı karşılaştırma konsol çıktısında görüntüleniyor.")
+                
+            except Exception as e:
+                self.log_message(f"[Protokol] Hata: {e}")
+        
+        threading.Thread(target=compare, daemon=True).start()
+
+    def generate_security_report(self):
+        """Kapsamlı güvenlik raporu"""
+        def generate():
+            self.log_message("[Rapor] Kapsamlı güvenlik raporu oluşturuluyor...")
+            try:
+                report = self.security_analyzer.generate_comprehensive_report()
+                
+                self.log_message("=== KAPSAMLI GÜVENLİK RAPORU ===")
+                self.log_message(f"Toplam Güvenlik Skoru: {report['security_score']}/100")
+                
+                # Skor kategorisi
+                score = report['security_score']
+                if score >= 90:
+                    grade = "A+ (Mükemmel) ✅"
+                elif score >= 80:
+                    grade = "A (Çok İyi) ✅"
+                elif score >= 70:
+                    grade = "B (İyi) ⚠️"
+                elif score >= 60:
+                    grade = "C (Orta) ⚠️"
+                elif score >= 50:
+                    grade = "D (Düşük) ❌"
+                else:
+                    grade = "F (Başarısız) ❌"
+                
+                self.log_message(f"Güvenlik Notu: {grade}")
+                
+                # Kısa özet
+                self.log_message(f"Şifreleme Durumu: {'Güvenli' if report['encryption']['is_encrypted'] else 'Risk'}")
+                self.log_message(f"MITM Tespiti: {'Risk' if report['mitm_detection']['mitm_detected'] else 'Güvenli'}")
+                
+                attack_count = sum(report['injection_detection'].values())
+                self.log_message(f"Paket Enjeksiyonu: {attack_count} şüpheli aktivite")
+                
+                self.log_message("Detaylı rapor konsol çıktısında görüntüleniyor.")
+                
+            except Exception as e:
+                self.log_message(f"[Rapor] Hata: {e}")
+        
+        threading.Thread(target=generate, daemon=True).start()
+
+    def start_packet_capture(self):
+        """Paket yakalama başlat"""
+        ip = self.target_ip_entry.get().strip()
+        
+        def capture():
+            self.log_message("[Paket Yakalama] Başlatılıyor...")
+            try:
+                interface = "Ethernet"  # Windows için tipik interface
+                filter_str = f"host {ip}" if ip else ""
+                
+                self.log_message(f"Interface: {interface}")
+                self.log_message(f"Filter: {filter_str or 'Tüm trafik'}")
+                self.log_message("50 paket yakalanıyor...")
+                
+                packets = self.security_analyzer.packet_capture(
+                    interface=interface,
+                    filter_str=filter_str,
+                    output_file="capture.pcap",
+                    count=50
+                )
+                
+                if packets:
+                    self.log_message(f"Toplam {len(packets)} paket yakalandı")
+                    self.log_message("Paketler 'capture.pcap' dosyasına kaydedildi")
+                else:
+                    self.log_message("Windows sistemde Wireshark kullanmanız önerilir")
+                    self.log_message("Alternatif: tshark komut satırı aracını kullanın")
+                    
+            except Exception as e:
+                self.log_message(f"[Paket Yakalama] Hata: {e}")
+
+        threading.Thread(target=capture, daemon=True).start()
     def start_clumsy(self):
         """Clumsy aracını başlat"""
         try:
