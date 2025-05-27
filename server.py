@@ -138,14 +138,18 @@ def start_udp_server(ip, port):
                     
                     # Chunk sayısını gönder
                     server_socket.sendto(str(len(chunks)).encode(), client_address)
+                    print(f"Public key {len(chunks)} parça halinde gönderiliyor")
                     
                     # Her chunk'ı gönder
                     for i, chunk in enumerate(chunks):
                         server_socket.sendto(f"{i}:".encode() + chunk, client_address)
                     
+                    print("Public key gönderildi")
+                    
                     # Şifrelenmiş AES anahtarını alma
                     encrypted_aes_key, _ = server_socket.recvfrom(512)
                     aes_key = decrypt_aes_key_with_rsa(encrypted_aes_key, private_key)
+                    print("AES anahtarı alındı ve çözüldü")
                     
                     # Dosya boyutunu alma
                     file_size_data, _ = server_socket.recvfrom(1024)
@@ -155,13 +159,28 @@ def start_udp_server(ip, port):
                     # Şifrelenmiş dosyayı parçalar halinde alma
                     encrypted_data = b''
                     received_bytes = 0
+                    packet_count = 0
                     
+                    print("Dosya alınıyor...")
                     while received_bytes < file_size:
-                        chunk, _ = server_socket.recvfrom(4096)
-                        encrypted_data += chunk
-                        received_bytes += len(chunk)
+                        try:
+                            chunk, addr = server_socket.recvfrom(4096)
+                            if addr == client_address:  # Doğru istemciden gelen paket
+                                encrypted_data += chunk
+                                received_bytes += len(chunk)
+                                packet_count += 1
+                                
+                                # İlerleme göster
+                                if packet_count % 50 == 0:
+                                    progress = (received_bytes / file_size) * 100
+                                    print(f"Alınan: {received_bytes}/{file_size} bytes ({progress:.1f}%)")
+                                    
+                        except socket.timeout:
+                            if received_bytes >= file_size:
+                                break
+                            continue
                     
-                    print("Dosya alındı, şifre çözülüyor...")
+                    print(f"Dosya tamamen alındı ({received_bytes} bytes), şifre çözülüyor...")
                     process_encrypted_file(encrypted_data, aes_key)
                 
             except socket.timeout:
@@ -196,14 +215,22 @@ def process_encrypted_file(encrypted_data, aes_key):
         decrypted_padded = decryptor.update(ciphertext) + decryptor.finalize()
         decrypted_data = unpadder.update(decrypted_padded) + unpadder.finalize()
 
+        # Benzersiz dosya adı oluştur
+        import time
+        timestamp = int(time.time())
+        filename = f"received_file_{timestamp}.txt"
+        
         # Dosyayı kaydetme
-        with open("received_file.txt", "wb") as f:
+        with open(filename, "wb") as f:
             f.write(decrypted_data)
 
-        print("Dosya başarıyla kaydedildi: received_file.txt")
+        print(f"Dosya başarıyla kaydedildi: {filename}")
+        print(f"Dosya boyutu: {len(decrypted_data)} bytes")
         
     except Exception as e:
         print(f"Dosya işleme hatası: {e}")
+        import traceback
+        traceback.print_exc()
 
 def start_server(ip="localhost", port=8080, protocol="tcp"):
     """Sunucuyu belirtilen protokol ile başlatır
@@ -247,7 +274,7 @@ if __name__ == "__main__":
     # Komut satırı argümanları
     ip = "localhost"
     port = 8080
-    protocol = "tcp"
+    protocol = "udp"  # Varsayılan UDP
     
     if len(sys.argv) >= 2:
         protocol = sys.argv[1]
@@ -257,7 +284,16 @@ if __name__ == "__main__":
         port = int(sys.argv[3])
     
     print(f"Sunucu parametreleri: {protocol.upper()} - {ip}:{port}")
-    start_server(ip, port, protocol)
+    
+    try:
+        start_server(ip, port, protocol)
+    except KeyboardInterrupt:
+        print("\nSunucu kullanıcı tarafından durduruldu.")
+        stop_server()
+    except Exception as e:
+        print(f"Sunucu hatası: {e}")
+        import traceback
+        traceback.print_exc()
 
 # 192.168.1.3 --> Server IP --> 192.168.56.1
 

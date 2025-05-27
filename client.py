@@ -38,7 +38,7 @@ def start_client(server_address, file_path, protocol='TCP'):
     
     Args:
         server_address: (host, port) tuple
-        file_path: Gönderilecek dosyanın yolu
+        file_path: Gönderilecek dosya yolu
         protocol: 'TCP' veya 'UDP' (varsayılan: 'TCP')
     """
     protocol = protocol.upper()
@@ -84,14 +84,7 @@ def send_file_tcp(server_address, file_path):
         # Dosyayı AES ile şifrele
         encrypted_file = encrypt_file_with_aes(file_path, aes_key)
         
-        # Dosya hash'i hesapla
-        file_hash = calculate_sha256(open(file_path, 'rb').read())
-        
         print("TCP ile şifreli dosya gönderiliyor...")
-        
-        # Dosya boyutunu önce gönder
-        file_size = len(encrypted_file)
-        client_socket.send(file_size.to_bytes(8, byteorder='big'))
         
         # Dosyayı gönder
         client_socket.sendall(encrypted_file)
@@ -105,21 +98,35 @@ def send_file_tcp(server_address, file_path):
         client_socket.close()
 
 def send_file_udp(server_address, file_path):
-    """UDP ile dosya gönderimi (chunk'lar halinde)"""
+    """UDP ile dosya gönderimi"""
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     
     try:
         print(f"UDP sunucusuna bağlanılıyor: {server_address}")
         
-        # UDP için handshake başlat
-        client_socket.sendto(b"HANDSHAKE_REQUEST", server_address)
+        # Sunucudan public key iste
+        client_socket.sendto(b"REQUEST_PUBLIC_KEY", server_address)
         
-        # Sunucudan RSA public key al
-        server_public_key_pem, _ = client_socket.recvfrom(2048)
+        # Public key chunk sayısını al
+        chunk_count_data, _ = client_socket.recvfrom(1024)
+        chunk_count = int(chunk_count_data.decode())
+        print(f"Public key {chunk_count} parça halinde alınacak")
+        
+        # Public key parçalarını al
+        chunks = {}
+        for _ in range(chunk_count):
+            data, _ = client_socket.recvfrom(2048)
+            chunk_num = int(data.split(b':')[0])
+            chunk_data = data[data.index(b':') + 1:]
+            chunks[chunk_num] = chunk_data
+        
+        # Parçaları birleştir
+        server_public_key_pem = b''.join(chunks[i] for i in sorted(chunks.keys()))
         server_public_key = serialization.load_pem_public_key(
             server_public_key_pem,
             backend=default_backend()
         )
+        print("Public key başarıyla alındı")
         
         # AES anahtarı oluştur
         aes_key = secrets.token_bytes(32)  # 256-bit AES anahtarı
@@ -136,37 +143,29 @@ def send_file_udp(server_address, file_path):
         
         # Şifrelenmiş AES anahtarını gönder
         client_socket.sendto(encrypted_aes_key, server_address)
+        print("AES anahtarı gönderildi")
         
         # Dosyayı AES ile şifrele
         encrypted_file = encrypt_file_with_aes(file_path, aes_key)
         
-        # Dosya hash'i hesapla
-        file_hash = calculate_sha256(open(file_path, 'rb').read())
-        
         print("UDP ile şifreli dosya gönderiliyor...")
         
-        # UDP için dosyayı chunk'lar halinde gönder
-        chunk_size = 1024  # UDP için uygun chunk boyutu
-        total_chunks = (len(encrypted_file) + chunk_size - 1) // chunk_size
-        
-        # Toplam chunk sayısını gönder
-        client_socket.sendto(f"TOTAL_CHUNKS:{total_chunks}".encode(), server_address)
+        # Dosya boyutunu gönder
+        file_size = len(encrypted_file)
+        client_socket.sendto(str(file_size).encode(), server_address)
+        print(f"Dosya boyutu gönderildi: {file_size} bytes")
         
         # Dosyayı chunk'lar halinde gönder
+        chunk_size = 4000  # UDP için güvenli boyut
+        sent_bytes = 0
+        
         for i in range(0, len(encrypted_file), chunk_size):
             chunk = encrypted_file[i:i + chunk_size]
-            chunk_number = i // chunk_size
+            client_socket.sendto(chunk, server_address)
+            sent_bytes += len(chunk)
             
-            # Chunk numarası ve veriyi birlikte gönder
-            message = f"CHUNK:{chunk_number}:".encode() + chunk
-            client_socket.sendto(message, server_address)
-            
-            # Küçük bir gecikme ekle (network yoğunluğunu azaltmak için)
-            import time
-            time.sleep(0.001)
-        
-        # Gönderim tamamlandı sinyali
-        client_socket.sendto(b"TRANSFER_COMPLETE", server_address)
+            if sent_bytes % (chunk_size * 10) == 0:  # Her 10 chunk'ta bir bilgi ver
+                print(f"Gönderilen: {sent_bytes}/{file_size} bytes ({sent_bytes/file_size*100:.1f}%)")
         
         print("UDP dosya gönderimi tamamlandı.")
         
@@ -176,9 +175,41 @@ def send_file_udp(server_address, file_path):
     finally:
         client_socket.close()
 
-
-
 if __name__ == "__main__":
-    server_address = ('localhost', 9999)
-    file_path = 'example.txt'  # Gönderilecek dosya
-    start_client(server_address, file_path)
+    import sys
+    
+    # Varsayılan değerler
+    server_host = 'localhost'
+    server_port = 8080
+    file_path = 'example.txt'
+    protocol = 'UDP'
+    
+    # Komut satırı argümanları
+    if len(sys.argv) >= 2:
+        protocol = sys.argv[1]
+    if len(sys.argv) >= 3:
+        server_host = sys.argv[2]  
+    if len(sys.argv) >= 4:
+        server_port = int(sys.argv[3])
+    if len(sys.argv) >= 5:
+        file_path = sys.argv[4]
+    
+    server_address = (server_host, server_port)
+    
+    # Dosya varlığını kontrol et
+    if not os.path.exists(file_path):
+        # Test dosyası oluştur
+        with open(file_path, 'w') as f:
+            f.write("Bu bir test dosyasıdır.\nUDP ile güvenli dosya transferi testi.\n" * 100)
+        print(f"Test dosyası oluşturuldu: {file_path}")
+    
+    print(f"Protokol: {protocol}")
+    print(f"Sunucu: {server_address}")
+    print(f"Dosya: {file_path}")
+    
+    try:
+        start_client(server_address, file_path, protocol)
+    except KeyboardInterrupt:
+        print("\nİşlem kullanıcı tarafından iptal edildi.")
+    except Exception as e:
+        print(f"Hata: {e}")
