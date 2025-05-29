@@ -54,139 +54,53 @@ def send_tcp_data(dst_ip, data, port=9999, mtu=1500, **ip_options):
     """
     TCP ile veri gönderme (Windows uyumlu)
     """
-    if platform.system() == "Windows":
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    
+    try:
+        s.connect((dst_ip, port))
+        # Veriyi parçalara ayır ve gönder
+        chunks = [data[i:i+mtu] for i in range(0, len(data), mtu)]
         
-        try:
-            s.connect((dst_ip, port))
-            # Veriyi parçalara ayır ve gönder
-            chunks = [data[i:i+mtu] for i in range(0, len(data), mtu)]
-            
-            for chunk in chunks:
-                s.send(chunk)
-            
-            s.close()
-            return True
-        except Exception as e:
-            print(f"TCP bağlantı hatası: {e}")
-            return False
-    else:
-        # Linux/Unix için Scapy kullan
-        return send_fragmented_data_scapy(None, dst_ip, data, port, mtu, protocol="tcp", **ip_options)
+        for chunk in chunks:
+            s.send(chunk)
+        
+        s.close()
+        return True
+    except Exception as e:
+        print(f"TCP bağlantı hatası: {e}")
+        return False
 
 def send_udp_data(dst_ip, data, port=9999, mtu=1500, **ip_options):
     """
     UDP ile veri gönderme (Windows uyumlu)
     """
-    if platform.system() == "Windows":
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    
+    try:
+        # UDP için parçalama gerekebilir
+        chunks = [data[i:i+mtu] for i in range(0, len(data), mtu)]
         
-        try:
-            # UDP için parçalama gerekebilir
-            chunks = [data[i:i+mtu] for i in range(0, len(data), mtu)]
-            
-            for chunk in chunks:
-                s.sendto(chunk, (dst_ip, port))
-            
-            s.close()
-            return True
-        except Exception as e:
-            print(f"UDP gönderim hatası: {e}")
-            return False
-    else:
-        # Linux/Unix için Scapy kullan
-        return send_fragmented_data_scapy(None, dst_ip, data, port, mtu, protocol="udp", **ip_options)
+        for chunk in chunks:
+            s.sendto(chunk, (dst_ip, port))
+        
+        s.close()
+        return True
+    except Exception as e:
+        print(f"UDP gönderim hatası: {e}")
+        return False
 
-def send_fragmented_data(src_ip, dst_ip, data, port=9999, mtu=1500, protocol="tcp", **ip_options):
+def send_fragmented_data(src_ip, dst_ip, data, port=9999, mtu=1500, protocol="tcp", 
+                              ttl=64, flags=0, tos=0, packet_id=None, force_fragment=False):
     """
-    Veriyi parçalayarak gönderme (TCP veya UDP) - IP seçenekleri ile
-    ip_options: ttl, flags, tos, packet_id gibi ek parametreler
+    Windows uyumlu: TCP/UDP soket ile veri gönderilir.
     """
     if protocol.lower() == "tcp":
-        return send_tcp_data(dst_ip, data, port, mtu, **ip_options)
+        return send_tcp_data(dst_ip, data, port, mtu, ttl=ttl, flags=flags, tos=tos, packet_id=packet_id)
     elif protocol.lower() == "udp":
-        return send_udp_data(dst_ip, data, port, mtu, **ip_options)
+        return send_udp_data(dst_ip, data, port, mtu, ttl=ttl, flags=flags, tos=tos, packet_id=packet_id)
     else:
         print(f"Desteklenmeyen protokol: {protocol}")
         return False
-
-def send_fragmented_data_scapy(src_ip, dst_ip, data, port=9999, mtu=1500, protocol="tcp", 
-                              ttl=64, flags=0, tos=0, packet_id=None, force_fragment=False):
-    """
-    Scapy kullanarak parçalanmış veri gönderme (Linux/Unix için)
-    
-    Parametreler:
-    - ttl: Time to Live değeri
-    - flags: IP flags (0=Normal, 2=Don't Fragment, 4=More Fragments)
-    - tos: Type of Service (QoS için)
-    - packet_id: Paket ID (None ise otomatik)
-    - force_fragment: Zorla parçalama yapılsın mı
-    """
-    if packet_id is None:
-        packet_id = random.randint(1000, 65535)
-    
-    # Don't Fragment flag kontrolü
-    if flags & 2 and not force_fragment:  # DF flag set ve zorla parçalama yok
-        # Tek paket olarak gönder
-        ip_packet = create_ip_packet(
-            src_ip=src_ip,
-            dst_ip=dst_ip,
-            ttl=ttl,
-            id=packet_id,
-            flags=flags,
-            frag=0,
-            tos=tos
-        )
-        
-        if protocol.lower() == "tcp":
-            transport_packet = TCP(dport=port, sport=random.randint(1024, 65535))
-        elif protocol.lower() == "udp":
-            transport_packet = UDP(dport=port, sport=random.randint(1024, 65535))
-        else:
-            print(f"Desteklenmeyen protokol: {protocol}")
-            return False
-        
-        packet = ip_packet / transport_packet / Raw(load=data)
-        send(packet)
-        return True
-    
-    # Parçalama gerekli
-    fragments = fragment_data(data, mtu)
-    total_fragments = len(fragments)
-    
-    for i, fragment in enumerate(fragments):
-        # Fragment flags hesaplama
-        fragment_flags = flags
-        if i < total_fragments - 1:  # Son parça değilse More Fragments flag ekle
-            fragment_flags |= 1
-        
-        # Fragment offset hesaplama (8 byte'lık birimlerle ölçülür)
-        frag_offset = i * (mtu - 20) // 8
-        
-        ip_packet = create_ip_packet(
-            src_ip=src_ip,
-            dst_ip=dst_ip,
-            ttl=ttl,
-            id=packet_id,  # Tüm parçalar için aynı ID
-            flags=fragment_flags,
-            frag=frag_offset,
-            tos=tos
-        )
-        
-        # Protokol türüne göre paket oluştur
-        if protocol.lower() == "tcp":
-            transport_packet = TCP(dport=port, sport=random.randint(1024, 65535))
-        elif protocol.lower() == "udp":
-            transport_packet = UDP(dport=port, sport=random.randint(1024, 65535))
-        else:
-            print(f"Desteklenmeyen protokol: {protocol}")
-            return False
-        
-        # Paketi hesapla ve gönder
-        packet = ip_packet / transport_packet / Raw(load=fragment)
-        send(packet)
-    
-    return True
 
 def create_custom_packet(src_ip, dst_ip, src_port, dst_port, data, protocol="tcp", 
                         ttl=64, flags=0, tos=0, packet_id=None):

@@ -8,7 +8,7 @@ from server import start_server, stop_server, server_running, server_socket
 from network_analysis import measure_latency, run_iperf_client
 from security_analysis import SecurityAnalyzer
 from ip_header import (
-    send_fragmented_data_scapy,
+    send_fragmented_data,
     monitor_network_errors, 
     test_checksum_manipulation,
     detect_transmission_errors,
@@ -473,7 +473,7 @@ class SecureTransferGUI:
                 self.log_message(f"Zorla parçalama: {'Evet' if self.force_fragment_var.get() else 'Hayır'}")
                 
                 # ip_header.py'deki güncellenmiş fonksiyonu çağır
-                success = send_fragmented_data_scapy(
+                success = send_fragmented_data(
                     src_ip=src_ip,
                     dst_ip=ip,
                     data=data,
