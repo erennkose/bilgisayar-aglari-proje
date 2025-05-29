@@ -25,7 +25,7 @@ class SecureTransferGUI:
         self.root.title("Güvenli Dosya Transfer Sistemi")
         self.root.geometry("850x1000")
 
-        # Ana notebook (sekmeler)
+        # Ana notebook
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
@@ -72,8 +72,7 @@ class SecureTransferGUI:
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
         # Başlık
-        title_label = tk.Label(main_frame, text="Sunucu Konfigürasyonu", 
-                              font=("Arial", 14, "bold"), fg="darkblue")
+        title_label = tk.Label(main_frame, text="Sunucu Konfigürasyonu", font=("Arial", 14, "bold"), fg="darkblue")
         title_label.pack(pady=(0, 20))
 
         # Sunucu ayarları
@@ -110,22 +109,17 @@ class SecureTransferGUI:
         status_frame = tk.LabelFrame(main_frame, text="Sunucu Durumu", font=("Arial", 10, "bold"))
         status_frame.pack(fill=tk.X, pady=(0, 20))
         
-        self.server_status_label = tk.Label(status_frame, text="Sunucu durduruldu", 
-                                          fg="red", font=("Arial", 10, "bold"))
+        self.server_status_label = tk.Label(status_frame, text="Sunucu durduruldu", fg="red", font=("Arial", 10, "bold"))
         self.server_status_label.pack(pady=10)
 
         # Kontrol butonları
         button_frame = tk.Frame(main_frame)
         button_frame.pack(fill=tk.X)
         
-        self.start_server_btn = tk.Button(button_frame, text="Sunucuyu Başlat", 
-                                         command=self.start_server, bg="lightgreen", 
-                                         font=("Arial", 10, "bold"), width=15)
+        self.start_server_btn = tk.Button(button_frame, text="Sunucuyu Başlat", command=self.start_server, bg="lightgreen", font=("Arial", 10, "bold"), width=15)
         self.start_server_btn.pack(side=tk.LEFT, padx=(0, 10))
         
-        self.stop_server_btn = tk.Button(button_frame, text="Sunucuyu Durdur", 
-                                        command=self.stop_server, bg="lightcoral", 
-                                        font=("Arial", 10, "bold"), width=15, state=tk.DISABLED)
+        self.stop_server_btn = tk.Button(button_frame, text="Sunucuyu Durdur", command=self.stop_server, bg="lightcoral", font=("Arial", 10, "bold"), width=15, state=tk.DISABLED)
         self.stop_server_btn.pack(side=tk.LEFT)
 
         self.server_thread = None
@@ -136,8 +130,7 @@ class SecureTransferGUI:
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
         # Başlık
-        title_label = tk.Label(main_frame, text="İstemci Konfigürasyonu", 
-                              font=("Arial", 14, "bold"), fg="darkgreen")
+        title_label = tk.Label(main_frame, text="İstemci Konfigürasyonu", font=("Arial", 14, "bold"), fg="darkgreen")
         title_label.pack(pady=(0, 20))
 
         # Bağlantı ayarları
@@ -184,7 +177,7 @@ class SecureTransferGUI:
         advanced_frame = tk.LabelFrame(main_frame, text="Gelişmiş IP Ayarları", font=("Arial", 10, "bold"))
         advanced_frame.pack(fill=tk.X, pady=(0, 20))
 
-        # MTU ayarı (mevcut)
+        # MTU ayarı
         mtu_frame = tk.Frame(advanced_frame)
         mtu_frame.pack(fill=tk.X, padx=10, pady=5)
         tk.Label(mtu_frame, text="MTU Boyutu:", width=15, anchor='w').pack(side=tk.LEFT)
@@ -222,7 +215,7 @@ class SecureTransferGUI:
         tk.Checkbutton(flags_inner_frame, text="Don't Fragment", variable=self.df_flag_var).pack(side=tk.LEFT)
         tk.Checkbutton(flags_inner_frame, text="More Fragments", variable=self.mf_flag_var).pack(side=tk.LEFT, padx=(10, 0))
 
-        # Kaynak IP ayarı (opsiyonel)
+        # Kaynak IP ayarı
         src_ip_frame = tk.Frame(advanced_frame)
         src_ip_frame.pack(fill=tk.X, padx=10, pady=5)
         tk.Label(src_ip_frame, text="Kaynak IP:", width=15, anchor='w').pack(side=tk.LEFT)
@@ -234,18 +227,15 @@ class SecureTransferGUI:
         force_frag_frame = tk.Frame(advanced_frame)
         force_frag_frame.pack(fill=tk.X, padx=10, pady=5)
         self.force_fragment_var = tk.BooleanVar()
-        tk.Checkbutton(force_frag_frame, text="Zorla Parçalama Yap", 
-                    variable=self.force_fragment_var).pack(anchor='w')
+        tk.Checkbutton(force_frag_frame, text="Zorla Parçalama Yap", variable=self.force_fragment_var).pack(anchor='w')
 
         # Gönderim butonları
         button_frame = tk.Frame(main_frame)
         button_frame.pack(fill=tk.X)
         
-        tk.Button(button_frame, text="Normal Gönder", command=self.send_file_normal, 
-                 bg="lightblue", font=("Arial", 10, "bold"), width=15).pack(side=tk.LEFT, padx=(0, 10))
+        tk.Button(button_frame, text="Normal Gönder", command=self.send_file_normal, bg="lightblue", font=("Arial", 10, "bold"), width=15).pack(side=tk.LEFT, padx=(0, 10))
         
-        tk.Button(button_frame, text="IP Header ile Gönder", command=self.send_with_ip_header, 
-                 bg="lightcyan", font=("Arial", 10, "bold"), width=18).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="IP Header ile Gönder", command=self.send_with_ip_header, bg="lightcyan", font=("Arial", 10, "bold"), width=18).pack(side=tk.LEFT)
 
     def create_tools_widgets(self):
         """Analiz araçları sekmesi widget'ları"""
@@ -253,8 +243,7 @@ class SecureTransferGUI:
         main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
 
         # Başlık
-        title_label = tk.Label(main_frame, text="Ağ Analiz Araçları", 
-                              font=("Arial", 14, "bold"), fg="darkorange")
+        title_label = tk.Label(main_frame, text="Ağ Analiz Araçları", font=("Arial", 14, "bold"), fg="darkorange")
         title_label.pack(pady=(0, 20))
 
         # Hedef IP girişi
@@ -274,10 +263,8 @@ class SecureTransferGUI:
         network_buttons_frame = tk.Frame(network_frame)
         network_buttons_frame.pack(padx=10, pady=10)
         
-        tk.Button(network_buttons_frame, text="Gecikme Ölç", command=self.run_latency_analysis,
-                 width=15, bg="lightsteelblue").pack(side=tk.LEFT, padx=(0, 10))
-        tk.Button(network_buttons_frame, text="Bant Genişliği Ölç", command=self.run_bandwidth_analysis,
-                 width=18, bg="lightsteelblue").pack(side=tk.LEFT)
+        tk.Button(network_buttons_frame, text="Gecikme Ölç", command=self.run_latency_analysis, width=15, bg="lightsteelblue").pack(side=tk.LEFT, padx=(0, 10))
+        tk.Button(network_buttons_frame, text="Bant Genişliği Ölç", command=self.run_bandwidth_analysis, width=18, bg="lightsteelblue").pack(side=tk.LEFT)
 
         # Güvenlik analizi araçları
         security_frame = tk.LabelFrame(main_frame, text="Güvenlik Analizi", font=("Arial", 10, "bold"))
@@ -286,34 +273,26 @@ class SecureTransferGUI:
         security_buttons_frame1 = tk.Frame(security_frame)
         security_buttons_frame1.pack(padx=10, pady=5)
         
-        tk.Button(security_buttons_frame1, text="Entropi Analizi", command=self.run_entropy_analysis,
-                width=15, bg="lightyellow").pack(side=tk.LEFT, padx=(0, 10))
-        tk.Button(security_buttons_frame1, text="MITM Simülasyonu", command=self.run_mitm_simulation,
-                width=18, bg="lightyellow").pack(side=tk.LEFT)
+        tk.Button(security_buttons_frame1, text="Entropi Analizi", command=self.run_entropy_analysis, width=15, bg="lightyellow").pack(side=tk.LEFT, padx=(0, 10))
+        tk.Button(security_buttons_frame1, text="MITM Simülasyonu", command=self.run_mitm_simulation, width=18, bg="lightyellow").pack(side=tk.LEFT)
         
         security_buttons_frame2 = tk.Frame(security_frame)
         security_buttons_frame2.pack(padx=10, pady=5)
         
-        tk.Button(security_buttons_frame2, text="Paket Enjeksiyonu", command=self.run_packet_injection,
-                width=15, bg="lightyellow").pack(side=tk.LEFT, padx=(0, 10))
-        tk.Button(security_buttons_frame2, text="Protokol Karşılaştır", command=self.compare_protocols,
-                width=18, bg="lightyellow").pack(side=tk.LEFT)
+        tk.Button(security_buttons_frame2, text="Paket Enjeksiyonu", command=self.run_packet_injection, width=15, bg="lightyellow").pack(side=tk.LEFT, padx=(0, 10))
+        tk.Button(security_buttons_frame2, text="Protokol Karşılaştır", command=self.compare_protocols, width=18, bg="lightyellow").pack(side=tk.LEFT)
         
         security_buttons_frame3 = tk.Frame(security_frame)
         security_buttons_frame3.pack(padx=10, pady=5)
         
-        tk.Button(security_buttons_frame3, text="Kapsamlı Rapor", command=self.generate_security_report,
-                width=15, bg="lightgreen").pack(side=tk.LEFT, padx=(0, 10))
-        tk.Button(security_buttons_frame3, text="Paket Yakalama", command=self.start_packet_capture,
-                width=18, bg="lightcyan").pack(side=tk.LEFT)
+        tk.Button(security_buttons_frame3, text="Kapsamlı Rapor", command=self.generate_security_report, width=15, bg="lightgreen").pack(side=tk.LEFT, padx=(0, 10))
+        tk.Button(security_buttons_frame3, text="Paket Yakalama", command=self.start_packet_capture, width=18, bg="lightcyan").pack(side=tk.LEFT)
         
         security_buttons_frame4 = tk.Frame(security_frame)
         security_buttons_frame4.pack(padx=10, pady=5)
 
-        tk.Button(security_buttons_frame4, text="Checksum Analizi", command=self.run_checksum_analysis,
-                width=15, bg="lightyellow").pack(side=tk.LEFT, padx=(0, 10))
-        tk.Button(security_buttons_frame4, text="Hata Tespiti", command=self.run_error_detection,
-                width=18, bg="lightyellow").pack(side=tk.LEFT)
+        tk.Button(security_buttons_frame4, text="Checksum Analizi", command=self.run_checksum_analysis, width=15, bg="lightyellow").pack(side=tk.LEFT, padx=(0, 10))
+        tk.Button(security_buttons_frame4, text="Hata Tespiti", command=self.run_error_detection, width=18, bg="lightyellow").pack(side=tk.LEFT)
 
         # Dış araçlar
         external_frame = tk.LabelFrame(main_frame, text="Dış Araçlar", font=("Arial", 10, "bold"))
@@ -322,10 +301,8 @@ class SecureTransferGUI:
         external_buttons_frame = tk.Frame(external_frame)
         external_buttons_frame.pack(padx=10, pady=10)
         
-        tk.Button(external_buttons_frame, text="Clumsy Başlat", command=self.start_clumsy,
-                 width=15, bg="lightpink").pack(side=tk.LEFT, padx=(0, 10))
-        tk.Button(external_buttons_frame, text="Wireshark Başlat", command=self.start_wireshark,
-                 width=18, bg="lightpink").pack(side=tk.LEFT)
+        tk.Button(external_buttons_frame, text="Clumsy Başlat", command=self.start_clumsy, width=15, bg="lightpink").pack(side=tk.LEFT, padx=(0, 10))
+        tk.Button(external_buttons_frame, text="Wireshark Başlat", command=self.start_wireshark, width=18, bg="lightpink").pack(side=tk.LEFT)
 
     def clear_output(self):
         """Çıktı alanını temizle"""
@@ -359,17 +336,13 @@ class SecureTransferGUI:
         def server_wrapper():
             try:
                 self.log_message(f"[Sunucu - {protocol.upper()}] Başlatılıyor: {ip}:{port}")
-                # Sunucu fonksiyonunu IP ve port parametreleriyle çağırın
-                # Not: server.py dosyanızdaki start_server fonksiyonunu güncellemek gerekebilir
-                start_server(ip, port, protocol)  # Burayı start_server(ip, port) olarak güncelleyin
+                start_server(ip, port, protocol)
                 
-            except Exception as e:
-                self.log_message(f"[Sunucu] Hata: {e}")
+            except Exception as e: self.log_message(f"[Sunucu] Hata: {e}")
         
         self.server_thread = threading.Thread(target=server_wrapper, daemon=True)
         self.server_thread.start()
         
-        # UI güncelleme
         self.server_status_label.config(text="Sunucu çalışıyor", fg="green")
         self.start_server_btn.config(state=tk.DISABLED)
         self.stop_server_btn.config(state=tk.NORMAL)
@@ -404,10 +377,9 @@ class SecureTransferGUI:
         def send():
             try:
                 self.log_message(f"[İstemci - {protocol.upper()}] Dosya gönderiliyor -> {ip}:{port}")
-                start_client((ip, port), file_path, protocol)  # ← Sadece bu satır değişti
+                start_client((ip, port), file_path, protocol)
                 self.log_message("[İstemci] Dosya başarıyla gönderildi!")
-            except Exception as e:
-                self.log_message(f"[İstemci] Hata: {e}")
+            except Exception as e: self.log_message(f"[İstemci] Hata: {e}")
     
         threading.Thread(target=send, daemon=True).start()
 
@@ -419,12 +391,11 @@ class SecureTransferGUI:
         mtu = self.mtu_entry.get().strip()
         protocol = self.client_protocol_var.get()
         
-        # Yeni parametreler
         ttl = self.ttl_entry.get().strip()
         tos = self.tos_entry.get().strip()
         src_ip = self.src_ip_entry.get().strip()
 
-        # Validasyon
+        # Kontrol
         if not ip or not file_path:
             messagebox.showerror("Hata", "Lütfen IP adresi ve dosya seçin.")
             return

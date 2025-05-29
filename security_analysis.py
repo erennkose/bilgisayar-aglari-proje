@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 import ssl
 import socket
+import platform
 
 class SecurityAnalyzer:
     def __init__(self):
@@ -142,8 +143,6 @@ class SecurityAnalyzer:
         Gelişmiş MITM saldırı simülasyonu ve tespit
         """
         print("\n=== MITM SALDIRI SİMÜLASYONU VE TESPİTİ ===")
-        
-        import platform
         
         if platform.system() == "Windows":
             print("MITM simülasyonu şu anda Windows üzerinde desteklenmiyor.")
