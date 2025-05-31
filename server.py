@@ -110,40 +110,27 @@ def start_tcp_server(ip, port):
 
 # UDP veri alma ve birleştirme fonksiyonunu ekleyelim
 def receive_fragmented_udp_data(server_socket, client_address, file_size):
-    """UDP ile parçalı gönderilen veriyi al ve birleştir"""
-    received_data = bytearray()
+    chunks = {}  # Sıralı chunk'ları saklamak için dict
     received_bytes = 0
-    packet_count = 0
+    expected_chunks = (file_size + 4000 - 1) // 4000  # Toplam chunk sayısı
     
-    print(f"UDP parçalı veri alınıyor... Beklenen boyut: {file_size} bytes")
+    while len(chunks) < expected_chunks:
+        try:
+            server_socket.settimeout(30.0)
+            data, addr = server_socket.recvfrom(4096)
+            if addr == client_address:
+                # Chunk numarasını ayır
+                separator_index = data.index(b':')
+                chunk_num = int(data[:separator_index])
+                chunk_data = data[separator_index + 1:]
+                
+                chunks[chunk_num] = chunk_data
+                received_bytes += len(chunk_data)
+        except socket.timeout:
+            continue
     
-    try:
-        while received_bytes < file_size:
-            try:
-                # UDP paketi al
-                chunk, addr = server_socket.recvfrom(4096)
-                if addr == client_address:  # Doğru istemciden gelen paket
-                    received_data.extend(chunk)
-                    received_bytes += len(chunk)
-                    packet_count += 1
-                    
-                    # İlerleme göster
-                    if packet_count % 50 == 0:
-                        progress = (received_bytes / file_size) * 100
-                        print(f"Alınan: {received_bytes}/{file_size} bytes ({progress:.1f}%)")
-                        
-            except socket.timeout:
-                if received_bytes >= file_size:
-                    break
-                print("UDP paket zaman aşımı, bekleniyor...")
-                continue
-        
-        print(f"Veri alımı tamamlandı. Toplam {packet_count} paket alındı.")
-        return bytes(received_data)
-        
-    except Exception as e:
-        print(f"UDP veri alma hatası: {e}")
-        return None
+    # Chunk'ları sırayla birleştir
+    return b''.join(chunks[i] for i in sorted(chunks.keys()))
 
 # UDP sunucu fonksiyonunu güncelle
 def start_udp_server(ip, port):
@@ -152,7 +139,7 @@ def start_udp_server(ip, port):
     
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_socket.bind((ip, port))
-    server_socket.settimeout(1.0)  # Zaman aşımı ekle
+    server_socket.settimeout(30.0)  # Zaman aşımı ekle
     server_running = True
     print(f"UDP Sunucu başlatıldı ({ip}:{port}), veri bekleniyor...")
     
@@ -174,7 +161,7 @@ def start_udp_server(ip, port):
                     )
                     
                     # PEM'i parçalara böl
-                    chunk_size = 1024
+                    chunk_size = 1400
                     chunks = [pem[i:i+chunk_size] for i in range(0, len(pem), chunk_size)]
                     
                     # Chunk sayısını gönder
@@ -220,7 +207,7 @@ def start_udp_server(ip, port):
         print("UDP Sunucu kapatıldı.")
 
 def process_encrypted_file(encrypted_data, aes_key, file_extension="txt"):
-    """Şifrelenmiş dosyayı çözer ve kaydeder"""
+    """Şifrelenmiş dosyayı çözer ve bulunduğumuz konuma kaydeder"""
     try:
         # Şifre çözme
         iv = encrypted_data[:16] 
@@ -237,6 +224,9 @@ def process_encrypted_file(encrypted_data, aes_key, file_extension="txt"):
         decrypted_padded = decryptor.update(ciphertext) + decryptor.finalize()
         decrypted_data = unpadder.update(decrypted_padded) + unpadder.finalize()
 
+        # Bulunduğumuz konumu al
+        current_dir = os.getcwd()
+        
         # Benzersiz dosya adı oluştur
         import time
         timestamp = int(time.time())
@@ -245,19 +235,24 @@ def process_encrypted_file(encrypted_data, aes_key, file_extension="txt"):
         if not file_extension.startswith('.'):
             file_extension = '.' + file_extension
             
+        # Tam dosya yolu oluştur
         filename = f"received_file_{timestamp}{file_extension}"
+        full_path = os.path.join(current_dir, filename)
         
         # Dosyayı kaydetme
-        with open(filename, "wb") as f:
+        with open(full_path, "wb") as f:
             f.write(decrypted_data)
 
-        print(f"Dosya başarıyla kaydedildi: {filename}")
+        print(f"Dosya başarıyla kaydedildi: {full_path}")
         print(f"Dosya boyutu: {len(decrypted_data)} bytes")
+        
+        return full_path
         
     except Exception as e:
         print(f"Dosya işleme hatası: {e}")
         import traceback
         traceback.print_exc()
+        return None
 
 def start_server(ip="localhost", port=8080, protocol="tcp"):
     """Sunucuyu belirtilen protokol ile başlatır

@@ -80,9 +80,22 @@ def send_udp_data(dst_ip, data, port=9999, mtu=1500, **ip_options):
 def send_fragmented_data(src_ip, dst_ip, data, port=9999, mtu=1500, protocol="tcp", 
                               ttl=64, flags=0, tos=0, packet_id=None, force_fragment=False):
     """
-    Windows uyumlu: TCP/UDP soket ile veri gönderilir.
+    Gerçek IP fragmentasyonu (UDP + force_fragment=True için Scapy ile)
     """
-    if protocol.lower() == "tcp":
+    if protocol.lower() == "udp" and force_fragment:
+        from scapy.all import IP, UDP, Raw, fragment, send
+        # Kaynak IP otomatik seçilsin mi?
+        if not src_ip:
+            src_ip = socket.gethostbyname(socket.gethostname())
+        # UDP başlığı boyutu: 8 byte, IP başlığı: 20 byte
+        max_payload = mtu - 28
+        pkt = IP(src=src_ip, dst=dst_ip, ttl=ttl, flags=flags, tos=tos, id=packet_id if packet_id else random.randint(1000, 65535)) / \
+              UDP(sport=random.randint(20000, 40000), dport=port) / Raw(load=data)
+        fragments = fragment(pkt, fragsize=max_payload)
+        for frag in fragments:
+            send(frag, verbose=0)
+        return True
+    elif protocol.lower() == "tcp":
         return send_tcp_data(dst_ip, data, port, mtu, ttl=ttl, flags=flags, tos=tos, packet_id=packet_id)
     elif protocol.lower() == "udp":
         return send_udp_data(dst_ip, data, port, mtu, ttl=ttl, flags=flags, tos=tos, packet_id=packet_id)

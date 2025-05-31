@@ -106,6 +106,9 @@ def send_file_tcp(server_address, file_path):
 def send_file_udp(server_address, file_path):
     """UDP ile dosya gönderimi"""
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65507)
+    client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 65507)
+    client_socket.settimeout(30.0)
     
     try:
         print(f"UDP sunucusuna bağlanılıyor: {server_address}")
@@ -174,8 +177,9 @@ def send_file_udp(server_address, file_path):
         
         for i in range(0, len(encrypted_file), chunk_size):
             chunk = encrypted_file[i:i + chunk_size]
-            client_socket.sendto(chunk, server_address)
-            sent_bytes += len(chunk)
+            chunk_num = i // chunk_size
+            numbered_chunk = str(chunk_num).encode() + b':' + chunk
+            client_socket.sendto(numbered_chunk, server_address)
             
             if sent_bytes % (chunk_size * 10) == 0:  # Her 10 chunk'ta bir bilgi ver
                 print(f"Gönderilen: {sent_bytes}/{file_size} bytes ({sent_bytes/file_size*100:.1f}%)")
