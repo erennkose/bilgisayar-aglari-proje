@@ -78,30 +78,41 @@ def send_udp_data(dst_ip, data, port=9999, mtu=1500, **ip_options):
         return False
 
 def send_fragmented_data(src_ip, dst_ip, data, port=9999, mtu=1500, protocol="tcp", 
-                              ttl=64, flags=0, tos=0, packet_id=None, force_fragment=False):
+                              ttl=64, flags=0, tos=0, packet_id=None):
     """
-    Gerçek IP fragmentasyonu (UDP + force_fragment=True için Scapy ile)
+    Scapy ile düşük seviyeli paket gönderimi
     """
-    if protocol.lower() == "udp" and force_fragment:
-        from scapy.all import IP, UDP, Raw, fragment, send
-        # Kaynak IP otomatik seçilsin mi?
-        if not src_ip:
-            src_ip = socket.gethostbyname(socket.gethostname())
-        # UDP başlığı boyutu: 8 byte, IP başlığı: 20 byte
-        max_payload = mtu - 28
-        pkt = IP(src=src_ip, dst=dst_ip, ttl=ttl, flags=flags, tos=tos, id=packet_id if packet_id else random.randint(1000, 65535)) / \
-              UDP(sport=random.randint(20000, 40000), dport=port) / Raw(load=data)
-        fragments = fragment(pkt, fragsize=max_payload)
-        for frag in fragments:
-            send(frag, verbose=0)
-        return True
-    elif protocol.lower() == "tcp":
-        return send_tcp_data(dst_ip, data, port, mtu, ttl=ttl, flags=flags, tos=tos, packet_id=packet_id)
-    elif protocol.lower() == "udp":
-        return send_udp_data(dst_ip, data, port, mtu, ttl=ttl, flags=flags, tos=tos, packet_id=packet_id)
+    # IP paketi oluştur
+    ip = IP(
+        src=src_ip if src_ip else None,  # None ise otomatik
+        dst=dst_ip,
+        ttl=ttl,
+        flags=flags,
+        tos=tos,
+        id=packet_id if packet_id else random.randint(1000, 65535)
+    )
+
+    # Transport protokolü
+    if protocol.lower() == "tcp":
+        transport = TCP(dport=port)
     else:
-        print(f"Desteklenmeyen protokol: {protocol}")
-        return False
+        transport = UDP(dport=port)
+
+    # Veriyi parçala ve gönder
+    fragments = []
+    for i in range(0, len(data), mtu):
+        fragment = ip/transport/Raw(load=data[i:i+mtu])
+        fragments.append(fragment)
+
+    # Paketleri gönder
+    for fragment in fragments:
+        try:
+            send(fragment, verbose=False)
+        except Exception as e:
+            print(f"Paket gönderim hatası: {e}")
+            return False
+
+    return True
 
 def create_custom_packet(src_ip, dst_ip, src_port, dst_port, data, protocol="tcp", 
                         ttl=64, flags=0, tos=0, packet_id=None):

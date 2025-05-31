@@ -16,7 +16,6 @@ from ip_header import (
 )
 
 IPERF_PATH = "C:\\iperf\\iperf3.exe"
-CLUMSY_PATH = "C:\\Program Files\\Clumsy\\clumsy.exe"
 WIRESHARK_PATH = "C:\\Program Files\\Wireshark\\Wireshark.exe"
 
 class SecureTransferGUI:
@@ -227,12 +226,6 @@ class SecureTransferGUI:
         fragmentation_frame = tk.LabelFrame(main_frame, text="Parçalama Ayarları", font=("Arial", 10, "bold"))
         fragmentation_frame.pack(fill=tk.X, pady=(0, 20))
 
-        # Zorla parçalama seçeneği
-        force_frag_frame = tk.Frame(fragmentation_frame)
-        force_frag_frame.pack(fill=tk.X, padx=10, pady=5)
-        self.force_fragment_var = tk.BooleanVar()
-        tk.Checkbutton(force_frag_frame, text="Zorla Parçalama Yap", variable=self.force_fragment_var).pack(anchor='w')
-
         # Parçalama boyutu ayarı
         frag_size_frame = tk.Frame(fragmentation_frame)
         frag_size_frame.pack(fill=tk.X, padx=10, pady=5)
@@ -299,7 +292,6 @@ class SecureTransferGUI:
         security_buttons_frame1 = tk.Frame(security_frame)
         security_buttons_frame1.pack(padx=10, pady=5)
         
-        tk.Button(security_buttons_frame1, text="Entropi Analizi", command=self.run_entropy_analysis, width=15, bg="lightyellow").pack(side=tk.LEFT, padx=(0, 10))
         tk.Button(security_buttons_frame1, text="MITM Simülasyonu", command=self.run_mitm_simulation, width=18, bg="lightyellow").pack(side=tk.LEFT)
         
         security_buttons_frame2 = tk.Frame(security_frame)
@@ -327,7 +319,6 @@ class SecureTransferGUI:
         external_buttons_frame = tk.Frame(external_frame)
         external_buttons_frame.pack(padx=10, pady=10)
         
-        tk.Button(external_buttons_frame, text="Clumsy Başlat", command=self.start_clumsy, width=15, bg="lightpink").pack(side=tk.LEFT, padx=(0, 10))
         tk.Button(external_buttons_frame, text="Wireshark Başlat", command=self.start_wireshark, width=18, bg="lightpink").pack(side=tk.LEFT)
 
     def clear_output(self):
@@ -467,7 +458,6 @@ class SecureTransferGUI:
                 self.log_message(f"MTU: {mtu}, TTL: {ttl}, ToS: {tos}")
                 self.log_message(f"Flags: {self.get_flag_description(flags)}")
                 self.log_message(f"Dosya boyutu: {len(data)} byte")
-                self.log_message(f"Zorla parçalama: {'Evet' if self.force_fragment_var.get() else 'Hayır'}")
                 
                 # ip_header.py'deki güncellenmiş fonksiyonu çağır
                 success = send_fragmented_data(
@@ -479,8 +469,7 @@ class SecureTransferGUI:
                     protocol=protocol,
                     ttl=ttl,
                     flags=flags,
-                    tos=tos,
-                    force_fragment=self.force_fragment_var.get()
+                    tos=tos
                 )
                 
                 if success:
@@ -540,7 +529,6 @@ class SecureTransferGUI:
                     ttl=64,  # Varsayılan TTL
                     flags=0,  # Varsayılan flags
                     tos=0,   # Varsayılan ToS
-                    force_fragment=True  # Zorla parçalama
                 )
                 
                 if success:
@@ -669,35 +657,6 @@ class SecureTransferGUI:
         
         threading.Thread(target=analyze, daemon=True).start()
 
-    def run_entropy_analysis(self):
-        """Gelişmiş entropi analizi"""
-        ip = self.target_ip_entry.get().strip()
-        if not ip:
-            messagebox.showerror("Hata", "Lütfen hedef IP girin.")
-            return
-        
-        def analyze():
-            self.log_message(f"[Entropi] {ip} adresine ait veri analiz ediliyor...")
-            try:
-                # Paket yakalama simülasyonu (Windows için)
-                self.log_message("[Entropi] Paket yakalama simüle ediliyor...")
-                packets = self.security_analyzer.packet_capture("Ethernet", f"host {ip}", count=30)
-                
-                # Entropi analizi
-                results = self.security_analyzer.analyze_encrypted_data(packets)
-                
-                self.log_message(f"Ortalama Entropi: {results['entropy']:.4f}")
-                self.log_message(f"Şifreleme Durumu: {'ŞİFRELİ' if results['is_encrypted'] else 'ŞİFRELENMEMİŞ'}")
-                
-                # Protokol dağılımı
-                for protocol, count in results['protocols'].items():
-                    if count > 0:
-                        self.log_message(f"{protocol}: {count} paket")
-                        
-            except Exception as e:
-                self.log_message(f"[Entropi] Hata: {e}")
-        
-        threading.Thread(target=analyze, daemon=True).start()
 
     def run_mitm_simulation(self):
         """Gelişmiş MITM simülasyonu"""
@@ -852,13 +811,6 @@ class SecureTransferGUI:
                 self.log_message(f"[Paket Yakalama] Hata: {e}")
 
         threading.Thread(target=capture, daemon=True).start()
-    def start_clumsy(self):
-        """Clumsy aracını başlat"""
-        try:
-            subprocess.Popen([CLUMSY_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            self.log_message("[Clumsy] Başlatıldı. Paket kaybı simülasyonu yapabilirsiniz.")
-        except Exception as e:
-            self.log_message(f"[Clumsy] Başlatılamadı: {e}")
 
     def start_wireshark(self):
         """Wireshark aracını başlat"""
