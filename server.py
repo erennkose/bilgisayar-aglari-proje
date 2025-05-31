@@ -74,6 +74,10 @@ def start_tcp_server(ip, port):
                 )
                 client_socket.send(pem)
                 
+                # Dosya uzantısını al
+                file_extension = client_socket.recv(32).decode().strip()
+                print(f"Dosya uzantısı alındı: {file_extension}")
+                
                 # Şifrelenmiş AES anahtarını alma
                 encrypted_aes_key = client_socket.recv(256)
                 aes_key = decrypt_aes_key_with_rsa(encrypted_aes_key, private_key)
@@ -87,7 +91,7 @@ def start_tcp_server(ip, port):
                     encrypted_data += chunk
 
                 print("Dosya alındı, şifre çözülüyor...")
-                process_encrypted_file(encrypted_data, aes_key)
+                process_encrypted_file(encrypted_data, aes_key, file_extension)
                 client_socket.close()
                 
             except socket.timeout:
@@ -119,8 +123,6 @@ def start_udp_server(ip, port):
     try:
         while server_running:
             try:
-                server_socket.settimeout(1.0)
-                
                 # İlk paket: public key isteği
                 data, client_address = server_socket.recvfrom(1024)
                 if data == b"REQUEST_PUBLIC_KEY":
@@ -145,6 +147,11 @@ def start_udp_server(ip, port):
                         server_socket.sendto(f"{i}:".encode() + chunk, client_address)
                     
                     print("Public key gönderildi")
+                    
+                    # Dosya uzantısını al
+                    file_extension, _ = server_socket.recvfrom(32)
+                    file_extension = file_extension.decode().strip()
+                    print(f"Dosya uzantısı alındı: {file_extension}")
                     
                     # Şifrelenmiş AES anahtarını alma
                     encrypted_aes_key, _ = server_socket.recvfrom(512)
@@ -181,7 +188,7 @@ def start_udp_server(ip, port):
                             continue
                     
                     print(f"Dosya tamamen alındı ({received_bytes} bytes), şifre çözülüyor...")
-                    process_encrypted_file(encrypted_data, aes_key)
+                    process_encrypted_file(encrypted_data, aes_key, file_extension)
                 
             except socket.timeout:
                 continue
@@ -197,7 +204,7 @@ def start_udp_server(ip, port):
             server_socket.close()
         print("UDP Sunucu kapatıldı.")
 
-def process_encrypted_file(encrypted_data, aes_key):
+def process_encrypted_file(encrypted_data, aes_key, file_extension="txt"):
     """Şifrelenmiş dosyayı çözer ve kaydeder"""
     try:
         # Şifre çözme
@@ -218,7 +225,12 @@ def process_encrypted_file(encrypted_data, aes_key):
         # Benzersiz dosya adı oluştur
         import time
         timestamp = int(time.time())
-        filename = f"received_file_{timestamp}.txt"
+        
+        # Uzantıyı düzelt
+        if not file_extension.startswith('.'):
+            file_extension = '.' + file_extension
+            
+        filename = f"received_file_{timestamp}{file_extension}"
         
         # Dosyayı kaydetme
         with open(filename, "wb") as f:

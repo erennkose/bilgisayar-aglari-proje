@@ -65,6 +65,12 @@ def send_file_tcp(server_address, file_path):
             backend=default_backend()
         )
         
+        # Dosya uzantısını gönder
+        file_extension = os.path.splitext(file_path)[1]
+        if not file_extension:
+            file_extension = '.txt'  # Varsayılan uzantı
+        client_socket.send(file_extension.encode())
+        
         # AES anahtarı oluştur
         aes_key = secrets.token_bytes(32)  # 256-bit AES anahtarı
         
@@ -127,6 +133,13 @@ def send_file_udp(server_address, file_path):
             backend=default_backend()
         )
         print("Public key başarıyla alındı")
+        
+        # Dosya uzantısını gönder
+        file_extension = os.path.splitext(file_path)[1]
+        if not file_extension:
+            file_extension = '.txt'  # Varsayılan uzantı
+        client_socket.sendto(file_extension.encode(), server_address)
+        print(f"Dosya uzantısı gönderildi: {file_extension}")
         
         # AES anahtarı oluştur
         aes_key = secrets.token_bytes(32)  # 256-bit AES anahtarı
