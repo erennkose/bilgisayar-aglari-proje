@@ -173,8 +173,8 @@ class SecureTransferGUI:
         self.file_entry.pack(side=tk.LEFT, padx=(10, 5), fill=tk.X, expand=True)
         tk.Button(file_inner_frame, text="Gözat", command=self.browse_file, width=8).pack(side=tk.RIGHT)
 
-        # Gelişmiş ayarlar
-        advanced_frame = tk.LabelFrame(main_frame, text="Gelişmiş IP Ayarları", font=("Arial", 10, "bold"))
+        # Gelişmiş ayarlar frame'ini ikiye böl
+        advanced_frame = tk.LabelFrame(main_frame, text="IP Header Ayarları", font=("Arial", 10, "bold"))
         advanced_frame.pack(fill=tk.X, pady=(0, 20))
 
         # MTU ayarı
@@ -220,22 +220,48 @@ class SecureTransferGUI:
         src_ip_frame.pack(fill=tk.X, padx=10, pady=5)
         tk.Label(src_ip_frame, text="Kaynak IP:", width=15, anchor='w').pack(side=tk.LEFT)
         self.src_ip_entry = tk.Entry(src_ip_frame, width=20, font=("Arial", 10))
-        self.src_ip_entry.insert(0, "auto")  # otomatik IP seçimi için
+        self.src_ip_entry.insert(0, "auto")
         self.src_ip_entry.pack(side=tk.LEFT, padx=(10, 0))
 
+        # Parçalama ayarları için yeni frame
+        fragmentation_frame = tk.LabelFrame(main_frame, text="Parçalama Ayarları", font=("Arial", 10, "bold"))
+        fragmentation_frame.pack(fill=tk.X, pady=(0, 20))
+
         # Zorla parçalama seçeneği
-        force_frag_frame = tk.Frame(advanced_frame)
+        force_frag_frame = tk.Frame(fragmentation_frame)
         force_frag_frame.pack(fill=tk.X, padx=10, pady=5)
         self.force_fragment_var = tk.BooleanVar()
         tk.Checkbutton(force_frag_frame, text="Zorla Parçalama Yap", variable=self.force_fragment_var).pack(anchor='w')
+
+        # Parçalama boyutu ayarı
+        frag_size_frame = tk.Frame(fragmentation_frame)
+        frag_size_frame.pack(fill=tk.X, padx=10, pady=5)
+        tk.Label(frag_size_frame, text="Parça Boyutu:", width=15, anchor='w').pack(side=tk.LEFT)
+        self.fragment_size_entry = tk.Entry(frag_size_frame, width=20, font=("Arial", 10))
+        self.fragment_size_entry.insert(0, "1000")
+        self.fragment_size_entry.pack(side=tk.LEFT, padx=(10, 0))
 
         # Gönderim butonları
         button_frame = tk.Frame(main_frame)
         button_frame.pack(fill=tk.X)
         
-        tk.Button(button_frame, text="Normal Gönder", command=self.send_file_normal, bg="lightblue", font=("Arial", 10, "bold"), width=15).pack(side=tk.LEFT, padx=(0, 10))
+        tk.Button(button_frame, text="Normal Gönder", 
+                  command=self.send_file_normal, 
+                  bg="lightblue", 
+                  font=("Arial", 10, "bold"), 
+                  width=15).pack(side=tk.LEFT, padx=(0, 10))
         
-        tk.Button(button_frame, text="IP Header ile Gönder", command=self.send_with_ip_header, bg="lightcyan", font=("Arial", 10, "bold"), width=18).pack(side=tk.LEFT)
+        tk.Button(button_frame, text="IP Header ile Gönder", 
+                  command=self.send_with_ip_header, 
+                  bg="lightcyan", 
+                  font=("Arial", 10, "bold"), 
+                  width=18).pack(side=tk.LEFT, padx=(0, 10))
+
+        tk.Button(button_frame, text="Parçalı Gönder", 
+                  command=self.send_fragmented, 
+                  bg="lightgreen", 
+                  font=("Arial", 10, "bold"), 
+                  width=15).pack(side=tk.LEFT)
 
     def create_tools_widgets(self):
         """Analiz araçları sekmesi widget'ları"""
@@ -464,6 +490,66 @@ class SecureTransferGUI:
                     
             except Exception as e:
                 self.log_message(f"[IP Header] Hata: {e}")
+
+        threading.Thread(target=send_file, daemon=True).start()
+
+    def send_fragmented(self):
+        """Parçalı dosya gönderimi"""
+        ip = self.client_ip_entry.get().strip()
+        file_path = self.file_entry.get().strip()
+        port = self.client_port_entry.get().strip()
+        fragment_size = self.fragment_size_entry.get().strip()
+        protocol = self.client_protocol_var.get()
+
+        # Kontrol
+        if not ip or not file_path:
+            messagebox.showerror("Hata", "Lütfen IP adresi ve dosya seçin.")
+            return
+        if not port.isdigit():
+            messagebox.showerror("Hata", "Geçerli bir port numarası girin.")
+            return
+        if not fragment_size.isdigit() or int(fragment_size) <= 0:
+            messagebox.showerror("Hata", "Geçerli bir parça boyutu girin.")
+            return
+        if not os.path.exists(file_path):
+            messagebox.showerror("Hata", "Dosya bulunamadı.")
+            return
+
+        port = int(port)
+        fragment_size = int(fragment_size)
+
+        def send_file():
+            try:
+                with open(file_path, 'rb') as f:
+                    data = f.read()
+                
+                self.log_message(f"[Parçalı Gönderim - {protocol.upper()}] Dosya gönderiliyor...")
+                self.log_message(f"Hedef: {ip}:{port}")
+                self.log_message(f"Parça Boyutu: {fragment_size} byte")
+                self.log_message(f"Dosya boyutu: {len(data)} byte")
+                self.log_message(f"Toplam parça sayısı: {(len(data) + fragment_size - 1) // fragment_size}")
+                
+                # ip_header.py'deki güncellenmiş fonksiyonu çağır
+                success = send_fragmented_data(
+                    src_ip=None,  # Otomatik IP seçimi
+                    dst_ip=ip,
+                    data=data,
+                    port=port,
+                    mtu=fragment_size,
+                    protocol=protocol,
+                    ttl=64,  # Varsayılan TTL
+                    flags=0,  # Varsayılan flags
+                    tos=0,   # Varsayılan ToS
+                    force_fragment=True  # Zorla parçalama
+                )
+                
+                if success:
+                    self.log_message("[Parçalı Gönderim] Dosya başarıyla gönderildi!")
+                else:
+                    self.log_message("[Parçalı Gönderim] Dosya gönderimi başarısız!")
+                
+            except Exception as e:
+                self.log_message(f"[Parçalı Gönderim] Hata: {e}")
 
         threading.Thread(target=send_file, daemon=True).start()
 
