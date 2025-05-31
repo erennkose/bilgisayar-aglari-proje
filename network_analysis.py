@@ -87,34 +87,3 @@ def run_iperf_client(server_ip, duration=10, port=5201):
     except Exception as e:
         print(f"Hata oluştu: {str(e)}")
         return None
-
-def simulate_packet_loss(percentage=5):
-    """
-    tc kullanarak paket kaybı simülasyonu (Linux'ta çalışır)
-    """
-    if platform.system() != "Linux":
-        print("Paket kaybı simülasyonu yalnızca Linux'ta desteklenmektedir")
-        return False
-    
-    try:
-        # Önce mevcut trafik kurallarını temizle
-        subprocess.run("tc qdisc del dev eth0 root", shell=True, stderr=subprocess.PIPE)
-        
-        # Yeni trafik kuralı ekle
-        cmd = f"tc qdisc add dev eth0 root netem loss {percentage}%"
-        subprocess.run(cmd, shell=True, check=True)
-        return True
-    except subprocess.CalledProcessError:
-        return False
-
-def reset_tc_rules():
-    """
-    tc trafik kurallarını sıfırlama
-    """
-    if platform.system() != "Linux":
-        return
-    
-    try:
-        subprocess.run("tc qdisc del dev eth0 root", shell=True)
-    except:
-        pass
