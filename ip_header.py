@@ -8,13 +8,13 @@ import struct
 def create_ip_packet(src_ip, dst_ip, ttl=64, id=None, flags=0, frag=0, tos=0):
     """
     Düşük seviyeli IP paketi oluşturma
-    flags: 0 = No flags, 1 = Reserved, 2 = Don't Fragment, 4 = More Fragments
-    tos: Type of Service (DSCP + ECN)
     """
     if id is None:
         id = random.randint(1000, 65535)
     
     ip_packet = IP(
+        version=4,  # IPv4'ü açıkça belirt
+        ihl=5,      # Standard IPv4 header length
         src=src_ip,
         dst=dst_ip,
         ttl=ttl,
@@ -24,7 +24,8 @@ def create_ip_packet(src_ip, dst_ip, ttl=64, id=None, flags=0, frag=0, tos=0):
         tos=tos
     )
     
-    return ip_packet
+    # Paketi yeniden oluştur
+    return IP(bytes(ip_packet))
 
 def calculate_ip_checksum(packet):
     """
@@ -77,40 +78,64 @@ def send_udp_data(dst_ip, data, port=9999, mtu=1500, **ip_options):
         print(f"UDP gönderim hatası: {e}")
         return False
 
-def send_fragmented_data(src_ip, dst_ip, data, port=9999, mtu=1500, protocol="tcp", 
+def send_fragmented_data(src_ip, dst_ip, data, port=9999, mtu=1500, protocol="udp", 
                               ttl=64, flags=0, tos=0, packet_id=None):
     """
     Scapy ile düşük seviyeli paket gönderimi
     """
-    # IP paketi oluştur
-    ip = IP(
-        src=src_ip if src_ip else None,  # None ise otomatik
-        dst=dst_ip,
-        ttl=ttl,
-        flags=flags,
-        tos=tos,
-        id=packet_id if packet_id else random.randint(1000, 65535)
-    )
+    if packet_id is None:
+        packet_id = random.randint(1000, 65535)
 
     # Transport protokolü
     if protocol.lower() == "tcp":
-        transport = TCP(dport=port)
+        transport = TCP(sport=random.randint(1024, 65535), dport=port)
     else:
-        transport = UDP(dport=port)
+        transport = UDP(sport=random.randint(1024, 65535), dport=port)
 
     # Veriyi parçala ve gönder
-    fragments = []
-    for i in range(0, len(data), mtu):
-        fragment = ip/transport/Raw(load=data[i:i+mtu])
-        fragments.append(fragment)
+    offset = 0
+    fragment_size = mtu - 20  # IP header boyutunu çıkar
+    
+    while offset < len(data):
+        # Son parça mı kontrol et
+        is_last_fragment = (offset + fragment_size >= len(data))
+        
+        # Flags ayarla (More Fragments biti)
+        current_flags = 0 if is_last_fragment else 2
+        
+        # Fragment offset (8 byte'lık birimler halinde)
+        frag_offset = offset // 8
+        
+        # IP paketi oluştur
+        ip = IP(
+            version=4,
+            ihl=5,
+            id=packet_id,
+            flags=current_flags,
+            frag=frag_offset,
+            proto={'tcp': 6, 'udp': 17}[protocol.lower()],
+            src=src_ip,
+            dst=dst_ip,
+            ttl=ttl,
+            tos=tos
+        )
 
-    # Paketleri gönder
-    for fragment in fragments:
+        # Parçayı al
+        chunk = data[offset:offset + fragment_size]
+        
+        # Paketi oluştur ve gönder
+        if offset == 0:  # İlk parça - transport header'ı içerir
+            packet = ip/transport/Raw(load=chunk)
+        else:  # Sonraki parçalar - sadece IP ve data
+            packet = ip/Raw(load=chunk)
+        
         try:
-            send(fragment, verbose=False)
+            send(packet, verbose=False)
         except Exception as e:
             print(f"Paket gönderim hatası: {e}")
             return False
+            
+        offset += fragment_size
 
     return True
 
