@@ -26,18 +26,6 @@ def create_ip_packet(src_ip, dst_ip, ttl=64, id=None, flags=0, frag=0, tos=0):
     
     return ip_packet
 
-def fragment_data(data, mtu=1500, header_size=20):
-    """
-    Veriyi belirtilen MTU'ya göre parçalara ayırma
-    """
-    max_payload = mtu - header_size
-    fragments = []
-    
-    for i in range(0, len(data), max_payload):
-        fragments.append(data[i:i+max_payload])
-    
-    return fragments
-
 def calculate_ip_checksum(packet):
     """
     IP başlığı checksum hesaplama

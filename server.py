@@ -108,12 +108,51 @@ def start_tcp_server(ip, port):
             server_socket.close()
         print("TCP Sunucu kapatıldı.")
 
+# UDP veri alma ve birleştirme fonksiyonunu ekleyelim
+def receive_fragmented_udp_data(server_socket, client_address, file_size):
+    """UDP ile parçalı gönderilen veriyi al ve birleştir"""
+    received_data = bytearray()
+    received_bytes = 0
+    packet_count = 0
+    
+    print(f"UDP parçalı veri alınıyor... Beklenen boyut: {file_size} bytes")
+    
+    try:
+        while received_bytes < file_size:
+            try:
+                # UDP paketi al
+                chunk, addr = server_socket.recvfrom(4096)
+                if addr == client_address:  # Doğru istemciden gelen paket
+                    received_data.extend(chunk)
+                    received_bytes += len(chunk)
+                    packet_count += 1
+                    
+                    # İlerleme göster
+                    if packet_count % 50 == 0:
+                        progress = (received_bytes / file_size) * 100
+                        print(f"Alınan: {received_bytes}/{file_size} bytes ({progress:.1f}%)")
+                        
+            except socket.timeout:
+                if received_bytes >= file_size:
+                    break
+                print("UDP paket zaman aşımı, bekleniyor...")
+                continue
+        
+        print(f"Veri alımı tamamlandı. Toplam {packet_count} paket alındı.")
+        return bytes(received_data)
+        
+    except Exception as e:
+        print(f"UDP veri alma hatası: {e}")
+        return None
+
+# UDP sunucu fonksiyonunu güncelle
 def start_udp_server(ip, port):
-    """UDP sunucusu başlatır"""
+    """UDP sunucusu başlatır ve parçalı dosya alımını yönetir"""
     global server_running, server_socket
     
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_socket.bind((ip, port))
+    server_socket.settimeout(1.0)  # Zaman aşımı ekle
     server_running = True
     print(f"UDP Sunucu başlatıldı ({ip}:{port}), veri bekleniyor...")
     
@@ -134,61 +173,37 @@ def start_udp_server(ip, port):
                         format=serialization.PublicFormat.SubjectPublicKeyInfo
                     )
                     
-                    # PEM'i parçalara böl (UDP paket boyutu sınırı için)
+                    # PEM'i parçalara böl
                     chunk_size = 1024
                     chunks = [pem[i:i+chunk_size] for i in range(0, len(pem), chunk_size)]
                     
                     # Chunk sayısını gönder
                     server_socket.sendto(str(len(chunks)).encode(), client_address)
-                    print(f"Public key {len(chunks)} parça halinde gönderiliyor")
                     
                     # Her chunk'ı gönder
                     for i, chunk in enumerate(chunks):
                         server_socket.sendto(f"{i}:".encode() + chunk, client_address)
                     
-                    print("Public key gönderildi")
-                    
                     # Dosya uzantısını al
                     file_extension, _ = server_socket.recvfrom(32)
                     file_extension = file_extension.decode().strip()
-                    print(f"Dosya uzantısı alındı: {file_extension}")
                     
                     # Şifrelenmiş AES anahtarını alma
                     encrypted_aes_key, _ = server_socket.recvfrom(512)
                     aes_key = decrypt_aes_key_with_rsa(encrypted_aes_key, private_key)
-                    print("AES anahtarı alındı ve çözüldü")
                     
                     # Dosya boyutunu alma
                     file_size_data, _ = server_socket.recvfrom(1024)
                     file_size = int(file_size_data.decode())
-                    print(f"Dosya boyutu: {file_size} bytes")
                     
-                    # Şifrelenmiş dosyayı parçalar halinde alma
-                    encrypted_data = b''
-                    received_bytes = 0
-                    packet_count = 0
+                    # Parçalı veriyi al ve birleştir
+                    encrypted_data = receive_fragmented_udp_data(server_socket, client_address, file_size)
                     
-                    print("Dosya alınıyor...")
-                    while received_bytes < file_size:
-                        try:
-                            chunk, addr = server_socket.recvfrom(4096)
-                            if addr == client_address:  # Doğru istemciden gelen paket
-                                encrypted_data += chunk
-                                received_bytes += len(chunk)
-                                packet_count += 1
-                                
-                                # İlerleme göster
-                                if packet_count % 50 == 0:
-                                    progress = (received_bytes / file_size) * 100
-                                    print(f"Alınan: {received_bytes}/{file_size} bytes ({progress:.1f}%)")
-                                    
-                        except socket.timeout:
-                            if received_bytes >= file_size:
-                                break
-                            continue
-                    
-                    print(f"Dosya tamamen alındı ({received_bytes} bytes), şifre çözülüyor...")
-                    process_encrypted_file(encrypted_data, aes_key, file_extension)
+                    if encrypted_data:
+                        print("Veri alındı, şifre çözülüyor...")
+                        process_encrypted_file(encrypted_data, aes_key, file_extension)
+                    else:
+                        print("Veri alımı başarısız!")
                 
             except socket.timeout:
                 continue
