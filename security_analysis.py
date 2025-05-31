@@ -1,15 +1,7 @@
 # enhanced_security_analysis.py - Gelişmiş güvenlik analizi ve protokol karşılaştırması
 from scapy.all import sniff, IP, TCP, Raw, send, sr1, wrpcap
-import time
-import threading
 import random
-import os
 import math
-import hashlib
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 import ssl
 import socket
 import platform

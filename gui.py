@@ -11,7 +11,6 @@ from ip_header import (
     send_fragmented_data,
     monitor_network_errors, 
     test_checksum_manipulation,
-    detect_transmission_errors,
     validate_ip_checksum
 )
 

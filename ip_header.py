@@ -1,9 +1,7 @@
 # ip_header.py - Geliştirilmiş IP başlıklarını işleme
-from scapy.all import IP, TCP, UDP, Raw, sr1, send, sniff
+from scapy.all import IP, TCP, UDP, Raw, send, sniff
 import random
 import socket
-import platform
-import struct
 
 def create_ip_packet(src_ip, dst_ip, ttl=64, id=None, flags=0, frag=0, tos=0):
     """

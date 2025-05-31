@@ -1,10 +1,6 @@
 # network_analysis.py - Ağ performansı analizi
-import time
 import subprocess
 import re
-import platform
-import socket
-from scapy.all import IP, ICMP, sr1
 
 def measure_latency(target_ip, count=5):
     """Ping kullanarak gecikmeyi ölçme"""
