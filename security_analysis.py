@@ -9,27 +9,6 @@ import platform
 class SecurityAnalyzer:
     def __init__(self):
         self.results = {}
-        
-    def packet_capture(self, interface, filter_str, output_file=None, count=100):
-        """
-        Gelişmiş paket yakalama ve analiz
-        """
-        import platform
-        
-        if platform.system() == "Windows":
-            print("Windows üzerinde paket yakalama için Wireshark kullanmanız önerilir.")
-            print("Alternatif olarak, şu komutu bir yönetici komut satırında çalıştırabilirsiniz:")
-            print(f"  tshark -i {interface} -f \"{filter_str}\" -c {count} -w {output_file or 'capture.pcap'}")
-            return []
-        else:
-            print(f"Paket yakalama başlatıldı: {interface}")
-            packets = sniff(iface=interface, filter=filter_str, count=count)
-            
-            if output_file:
-                wrpcap(output_file, packets)
-                print(f"Paketler kaydedildi: {output_file}")
-            
-            return packets
 
     def analyze_encrypted_data(self, packets):
         """
@@ -135,38 +114,7 @@ class SecurityAnalyzer:
         Gelişmiş MITM saldırı simülasyonu ve tespit
         """
         print("\n=== MITM SALDIRI SİMÜLASYONU VE TESPİTİ ===")
-        
-        if platform.system() == "Windows":
-            print("MITM simülasyonu şu anda Windows üzerinde desteklenmiyor.")
-            return self._simulate_mitm_detection()
-        
-        # MITM tespit mekanizmaları
-        detection_results = {
-            'arp_table_anomalies': False,
-            'certificate_validation': False,
-            'traffic_patterns': False,
-            'mitm_detected': False
-        }
-        
-        # ARP tablosu analizi
-        detection_results['arp_table_anomalies'] = self._detect_arp_spoofing(victim_ip, gateway_ip)
-        
-        # Sertifika doğrulama testi
-        detection_results['certificate_validation'] = self._test_certificate_pinning(victim_ip)
-        
-        # Trafik pattern analizi
-        packets = self.packet_capture(interface, f"host {victim_ip}", count=50)
-        detection_results['traffic_patterns'] = self._analyze_traffic_patterns(packets)
-        
-        # Genel MITM tespiti
-        detection_results['mitm_detected'] = any([
-            detection_results['arp_table_anomalies'],
-            detection_results['certificate_validation'],
-            detection_results['traffic_patterns']
-        ])
-        
-        self._report_mitm_results(detection_results)
-        return detection_results
+        return self._simulate_mitm_detection()
 
     def _simulate_mitm_detection(self):
         """Windows için MITM tespit simülasyonu"""

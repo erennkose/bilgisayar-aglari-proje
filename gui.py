@@ -303,7 +303,6 @@ class SecureTransferGUI:
         security_buttons_frame3.pack(padx=10, pady=5)
         
         tk.Button(security_buttons_frame3, text="Kapsamlı Rapor", command=self.generate_security_report, width=15, bg="lightgreen").pack(side=tk.LEFT, padx=(0, 10))
-        tk.Button(security_buttons_frame3, text="Paket Yakalama", command=self.start_packet_capture, width=18, bg="lightcyan").pack(side=tk.LEFT)
         
         security_buttons_frame4 = tk.Frame(security_frame)
         security_buttons_frame4.pack(padx=10, pady=5)
@@ -777,39 +776,6 @@ class SecureTransferGUI:
                 self.log_message(f"[Rapor] Hata: {e}")
         
         threading.Thread(target=generate, daemon=True).start()
-
-    def start_packet_capture(self):
-        """Paket yakalama başlat"""
-        ip = self.target_ip_entry.get().strip()
-        
-        def capture():
-            self.log_message("[Paket Yakalama] Başlatılıyor...")
-            try:
-                interface = "Ethernet"  # Windows için tipik interface
-                filter_str = f"host {ip}" if ip else ""
-                
-                self.log_message(f"Interface: {interface}")
-                self.log_message(f"Filter: {filter_str or 'Tüm trafik'}")
-                self.log_message("50 paket yakalanıyor...")
-                
-                packets = self.security_analyzer.packet_capture(
-                    interface=interface,
-                    filter_str=filter_str,
-                    output_file="capture.pcap",
-                    count=50
-                )
-                
-                if packets:
-                    self.log_message(f"Toplam {len(packets)} paket yakalandı")
-                    self.log_message("Paketler 'capture.pcap' dosyasına kaydedildi")
-                else:
-                    self.log_message("Windows sistemde Wireshark kullanmanız önerilir")
-                    self.log_message("Alternatif: tshark komut satırı aracını kullanın")
-                    
-            except Exception as e:
-                self.log_message(f"[Paket Yakalama] Hata: {e}")
-
-        threading.Thread(target=capture, daemon=True).start()
 
     def start_wireshark(self):
         """Wireshark aracını başlat"""
