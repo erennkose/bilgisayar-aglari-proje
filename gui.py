@@ -7,7 +7,7 @@ from client import start_client
 from server import start_server, stop_server, server_running, server_socket
 from network_analysis import measure_latency, run_iperf_client
 from security_analysis import SecurityAnalyzer
-from ip_header import send_fragmented_data, monitor_network_errors,  test_checksum_manipulation, validate_ip_checksum
+from ip_header import send_fragmented_data, monitor_network_errors, test_checksum_manipulation, validate_ip_checksum
 
 IPERF_PATH = "C:\\iperf\\iperf3.exe"
 WIRESHARK_PATH = "C:\\Program Files\\Wireshark\\Wireshark.exe"
