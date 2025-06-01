@@ -289,33 +289,6 @@ def stop_server():
         except:
             pass
 
-if __name__ == "__main__":
-    import sys
-    
-    # Komut satırı argümanları
-    ip = "localhost"
-    port = 8080
-    protocol = "udp"  # Varsayılan UDP
-    
-    if len(sys.argv) >= 2:
-        protocol = sys.argv[1]
-    if len(sys.argv) >= 3:
-        ip = sys.argv[2]
-    if len(sys.argv) >= 4:
-        port = int(sys.argv[3])
-    
-    print(f"Sunucu parametreleri: {protocol.upper()} - {ip}:{port}")
-    
-    try:
-        start_server(ip, port, protocol)
-    except KeyboardInterrupt:
-        print("\nSunucu kullanıcı tarafından durduruldu.")
-        stop_server()
-    except Exception as e:
-        print(f"Sunucu hatası: {e}")
-        import traceback
-        traceback.print_exc()
-
 # 192.168.1.3 --> Server IP --> 192.168.56.1
 
 # python main.py client --file gonderen_dosya.txt --ip 192.168.56.1

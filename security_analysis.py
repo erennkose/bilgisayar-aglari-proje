@@ -191,7 +191,6 @@ class SecurityAnalyzer:
 
     def _analyze_tcp_sequences(self, ip, port):
         """TCP sequence numarası analizi"""
-        # Gerçek implementasyonda TCP sequence numaraları analiz edilir
         return random.choice([True, False])
 
     def _validate_packet_checksums(self, ip, port):
@@ -277,9 +276,7 @@ class SecurityAnalyzer:
         print("GÜVENLİK SEVİYESİ SIRALAMASI")
         print("="*60)
         
-        security_ranking = sorted(protocols.items(), 
-                                key=lambda x: {'Düşük': 1, 'Yüksek': 2, 'Çok Yüksek': 3}[x[1]['security_level']], 
-                                reverse=True)
+        security_ranking = sorted(protocols.items(), key=lambda x: {'Düşük': 1, 'Yüksek': 2, 'Çok Yüksek': 3}[x[1]['security_level']], reverse=True)
         
         for i, (protocol, details) in enumerate(security_ranking, 1):
             print(f"{i}. {protocol} - {details['security_level']} Güvenlik")
@@ -383,13 +380,3 @@ class SecurityAnalyzer:
             color = "❌"
         
         print(f"{color} Güvenlik Notu: {grade}")
-
-# Kullanım örneği
-if __name__ == "__main__":
-    analyzer = SecurityAnalyzer()
-    
-    # Simüle edilmiş analiz
-    print("Güvenlik analizi başlatılıyor...")
-    report = analyzer.generate_comprehensive_report()
-    
-    print(f"\nAnaliz tamamlandı. Güvenlik skoru: {report['security_score']}/100")

@@ -315,7 +315,7 @@ def monitor_network_errors(interface=None, count=100, filter_str="ip"):
                 }
                 error_packets.append(error_info)
                 
-                print(f"❌ CHECKSUM HATASI:")
+                print(f"   CHECKSUM HATASI:")
                 print(f"   Kaynak IP: {error_info['src_ip']}")
                 print(f"   Hedef IP: {error_info['dst_ip']}")
                 print(f"   Hesaplanan: {error_info['calculated_checksum']}")
@@ -330,7 +330,7 @@ def monitor_network_errors(interface=None, count=100, filter_str="ip"):
         print(f"Paket yakalama hatası: {e}")
     
     # Sonuçları özetle
-    print(f"\n📊 ÖZET:")
+    print(f"\n   ÖZET:")
     print(f"Toplam checksum hatası: {len(error_packets)}")
     print(f"Hata oranı: {(len(error_packets)/count)*100:.2f}%")
     
@@ -340,17 +340,17 @@ def test_checksum_manipulation():
     """
     Checksum manipülasyonu test fonksiyonu
     """
-    print("🧪 Checksum Manipülasyon Testi\n")
+    print("   Checksum Manipülasyon Testi\n")
     
     # Normal paket oluştur
     normal_packet = create_ip_packet_with_custom_checksum("192.168.1.1", "192.168.1.2")
-    print(f"✅ Normal paket checksum: {hex(normal_packet.chksum)}")
+    print(f"   Normal paket checksum: {hex(normal_packet.chksum)}")
     
     # Bozuk checksum ile paket oluştur
     corrupted_packet = create_ip_packet_with_custom_checksum(
         "192.168.1.1", "192.168.1.2", custom_checksum=0xDEAD
     )
-    print(f"❌ Bozuk paket checksum: {hex(corrupted_packet.chksum)}")
+    print(f"   Bozuk paket checksum: {hex(corrupted_packet.chksum)}")
     
     # Doğrulama yap
     is_valid_normal, calc_normal, recv_normal = validate_ip_checksum(normal_packet)

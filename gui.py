@@ -7,12 +7,7 @@ from client import start_client
 from server import start_server, stop_server, server_running, server_socket
 from network_analysis import measure_latency, run_iperf_client
 from security_analysis import SecurityAnalyzer
-from ip_header import (
-    send_fragmented_data,
-    monitor_network_errors, 
-    test_checksum_manipulation,
-    validate_ip_checksum
-)
+from ip_header import send_fragmented_data, monitor_network_errors,  test_checksum_manipulation, validate_ip_checksum
 
 IPERF_PATH = "C:\\iperf\\iperf3.exe"
 WIRESHARK_PATH = "C:\\Program Files\\Wireshark\\Wireshark.exe"
@@ -586,13 +581,13 @@ class SecureTransferGUI:
                 
                 # Sonuçları özetle
                 if error_packets:
-                    self.log_message(f"⚠️ {len(error_packets)} checksum hatası tespit edildi!")
+                    self.log_message(f"   {len(error_packets)} checksum hatası tespit edildi!")
                     for i, error in enumerate(error_packets[:5]):  # İlk 5 hatayı göster
                         self.log_message(f"  {i+1}. {error['src_ip']} -> {error['dst_ip']} "
                                     f"(Hesaplanan: {error['calculated_checksum']}, "
                                     f"Alınan: {error['received_checksum']})")
                 else:
-                    self.log_message("✅ Checksum hatası tespit edilmedi.")
+                    self.log_message("   Checksum hatası tespit edilmedi.")
                     
             except Exception as e:
                 self.log_message(f"[Hata Tespiti] Hata: {e}")
@@ -674,9 +669,9 @@ class SecureTransferGUI:
                 self.log_message(f"Trafik Anomalileri: {'TESPIT EDİLDİ' if results['traffic_patterns'] else 'Normal'}")
                 
                 if results['mitm_detected']:
-                    self.log_message("⚠️ MITM SALDIRISI TESPİT EDİLDİ!")
+                    self.log_message("   MITM SALDIRISI TESPİT EDİLDİ!")
                 else:
-                    self.log_message("✅ MITM tespiti: Güvenli")
+                    self.log_message("   MITM tespiti: Güvenli")
                     
             except Exception as e:
                 self.log_message(f"[MITM] Hata: {e}")
@@ -703,9 +698,9 @@ class SecureTransferGUI:
                 self.log_message(f"Payload Analizi: {'ŞÜPHELI' if results['payload_analysis'] else 'NORMAL'}")
                 
                 if detection_count > 0:
-                    self.log_message(f"⚠️ {detection_count} farklı tespit metodu şüpheli aktivite buldu!")
+                    self.log_message(f"   {detection_count} farklı tespit metodu şüpheli aktivite buldu!")
                 else:
-                    self.log_message("✅ Paket enjeksiyonu tespiti: Güvenli")
+                    self.log_message("   Paket enjeksiyonu tespiti: Güvenli")
                     
             except Exception as e:
                 self.log_message(f"[Enjeksiyon] Hata: {e}")
@@ -749,17 +744,17 @@ class SecureTransferGUI:
                 # Skor kategorisi
                 score = report['security_score']
                 if score >= 90:
-                    grade = "A+ (Mükemmel) ✅"
+                    grade = "A+ (Mükemmel) "
                 elif score >= 80:
-                    grade = "A (Çok İyi) ✅"
+                    grade = "A (Çok İyi) "
                 elif score >= 70:
-                    grade = "B (İyi) ⚠️"
+                    grade = "B (İyi) "
                 elif score >= 60:
-                    grade = "C (Orta) ⚠️"
+                    grade = "C (Orta) "
                 elif score >= 50:
-                    grade = "D (Düşük) ❌"
+                    grade = "D (Düşük) "
                 else:
-                    grade = "F (Başarısız) ❌"
+                    grade = "F (Başarısız) "
                 
                 self.log_message(f"Güvenlik Notu: {grade}")
                 

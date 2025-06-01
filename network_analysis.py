@@ -4,51 +4,45 @@ import re
 
 def measure_latency(target_ip, count=5):
     """Ping kullanarak gecikmeyi ölçme"""
-    import platform
+    try:
+        output = subprocess.check_output(
+            ["ping", "-n", str(count), target_ip],
+            universal_newlines=True,
+            stderr=subprocess.STDOUT
+        )
+        
+        # Ping istatistiklerinden doğrudan değerleri alalım
+        # "Minimum = 0ms, Maximum = 0ms, Average = 0ms" satırını arıyoruz
+        stats_pattern = r"Minimum = (\d+)ms, Maximum = (\d+)ms, Average = (\d+)ms"
+        stats_match = re.search(stats_pattern, output)
+        
+        if stats_match:
+            min_latency = float(stats_match.group(1))
+            max_latency = float(stats_match.group(2))
+            avg_latency = float(stats_match.group(3))
+            
+            # Örnekleme verileri için her yanıtı ayrı ayrı kontrol edelim
+            samples_pattern = r"time[=<](\d+)ms"
+            samples = [float(match) for match in re.findall(samples_pattern, output)]
+            
+            # Eğer "<1ms" formatı varsa, bunları 0.5ms olarak kabul edelim
+            if not samples:
+                less_than_pattern = r"time<1ms"
+                less_than_count = len(re.findall(less_than_pattern, output))
+                samples = [0.5] * less_than_count
+            
+            return {
+                'min': min_latency,
+                'avg': avg_latency,
+                'max': max_latency,
+                'samples': samples
+            }
+        else:
+            print("Ping istatistikleri bulunamadı")
+    except subprocess.CalledProcessError as e:
+        print(f"Ping hatası: {e}")
     
-    if platform.system() == "Windows":
-        import subprocess
-        import re
-        
-        try:
-            output = subprocess.check_output(
-                ["ping", "-n", str(count), target_ip],
-                universal_newlines=True,
-                stderr=subprocess.STDOUT
-            )
-            
-            # Ping istatistiklerinden doğrudan değerleri alalım
-            # "Minimum = 0ms, Maximum = 0ms, Average = 0ms" satırını arıyoruz
-            stats_pattern = r"Minimum = (\d+)ms, Maximum = (\d+)ms, Average = (\d+)ms"
-            stats_match = re.search(stats_pattern, output)
-            
-            if stats_match:
-                min_latency = float(stats_match.group(1))
-                max_latency = float(stats_match.group(2))
-                avg_latency = float(stats_match.group(3))
-                
-                # Örnekleme verileri için her yanıtı ayrı ayrı kontrol edelim
-                samples_pattern = r"time[=<](\d+)ms"
-                samples = [float(match) for match in re.findall(samples_pattern, output)]
-                
-                # Eğer "<1ms" formatı varsa, bunları 0.5ms olarak kabul edelim
-                if not samples:
-                    less_than_pattern = r"time<1ms"
-                    less_than_count = len(re.findall(less_than_pattern, output))
-                    samples = [0.5] * less_than_count
-                
-                return {
-                    'min': min_latency,
-                    'avg': avg_latency,
-                    'max': max_latency,
-                    'samples': samples
-                }
-            else:
-                print("Ping istatistikleri bulunamadı")
-        except subprocess.CalledProcessError as e:
-            print(f"Ping hatası: {e}")
-        
-        return None
+    return None
 
 def run_iperf_client(server_ip, duration=10, port=5201):
     """
