@@ -263,11 +263,20 @@ class SecureTransferGUI:
         target_frame = tk.LabelFrame(main_frame, text="Hedef Bilgileri", font=("Arial", 10, "bold"))
         target_frame.pack(fill=tk.X, pady=(0, 20))
         
+        # IP adresi girişi
         ip_frame = tk.Frame(target_frame)
-        ip_frame.pack(fill=tk.X, padx=10, pady=10)
+        ip_frame.pack(fill=tk.X, padx=10, pady=5)
         tk.Label(ip_frame, text="Hedef IP Adresi:", width=15, anchor='w').pack(side=tk.LEFT)
         self.target_ip_entry = tk.Entry(ip_frame, width=20, font=("Arial", 10))
         self.target_ip_entry.pack(side=tk.LEFT, padx=(10, 0))
+
+        # Port girişi - YENİ
+        port_frame = tk.Frame(target_frame)
+        port_frame.pack(fill=tk.X, padx=10, pady=5)
+        tk.Label(port_frame, text="Port:", width=15, anchor='w').pack(side=tk.LEFT)
+        self.target_port_entry = tk.Entry(port_frame, width=20, font=("Arial", 10))
+        self.target_port_entry.insert(0, "9999")  # Varsayılan port
+        self.target_port_entry.pack(side=tk.LEFT, padx=(10, 0))
 
         # Ağ analizi araçları
         network_frame = tk.LabelFrame(main_frame, text="Ağ Performans Analizi", font=("Arial", 10, "bold"))
@@ -278,6 +287,44 @@ class SecureTransferGUI:
         
         tk.Button(network_buttons_frame, text="Gecikme Ölç", command=self.run_latency_analysis, width=15, bg="lightsteelblue").pack(side=tk.LEFT, padx=(0, 10))
         tk.Button(network_buttons_frame, text="Bant Genişliği Ölç", command=self.run_bandwidth_analysis, width=18, bg="lightsteelblue").pack(side=tk.LEFT)
+
+        # Paket Kaybı Simülasyonu
+        packet_loss_frame = tk.LabelFrame(main_frame, text="Paket Kaybı Simülasyonu", font=("Arial", 10, "bold"))
+        packet_loss_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        # Kayıp oranı ayarı
+        loss_rate_frame = tk.Frame(packet_loss_frame)
+        loss_rate_frame.pack(fill=tk.X, padx=10, pady=5)
+        tk.Label(loss_rate_frame, text="Kayıp Oranı (%):", width=15, anchor='w').pack(side=tk.LEFT)
+        self.loss_rate_entry = tk.Entry(loss_rate_frame, width=10)
+        self.loss_rate_entry.insert(0, "30")
+        self.loss_rate_entry.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Maksimum deneme sayısı
+        retries_frame = tk.Frame(packet_loss_frame)
+        retries_frame.pack(fill=tk.X, padx=10, pady=5)
+        tk.Label(retries_frame, text="Max. Deneme:", width=15, anchor='w').pack(side=tk.LEFT)
+        self.max_retries_entry = tk.Entry(retries_frame, width=10)
+        self.max_retries_entry.insert(0, "3")
+        self.max_retries_entry.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Test verisi boyutu
+        data_size_frame = tk.Frame(packet_loss_frame)
+        data_size_frame.pack(fill=tk.X, padx=10, pady=5)
+        tk.Label(data_size_frame, text="Test Veri Boyutu:", width=15, anchor='w').pack(side=tk.LEFT)
+        self.data_size_entry = tk.Entry(data_size_frame, width=10)
+        self.data_size_entry.insert(0, "500")
+        self.data_size_entry.pack(side=tk.LEFT, padx=(10, 0))
+        tk.Label(data_size_frame, text="byte").pack(side=tk.LEFT, padx=(5, 0))
+        
+        # Simülasyon başlatma butonu
+        button_frame = tk.Frame(packet_loss_frame)
+        button_frame.pack(padx=10, pady=10)
+        tk.Button(button_frame, 
+                 text="Simülasyonu Başlat", 
+                 command=self.run_packet_loss_simulation,
+                 width=20, 
+                 bg="lightblue").pack()
 
         # Güvenlik analizi araçları
         security_frame = tk.LabelFrame(main_frame, text="Güvenlik Analizi", font=("Arial", 10, "bold"))
@@ -779,6 +826,63 @@ class SecureTransferGUI:
             self.log_message("[Wireshark] Başlatıldı. Ağ trafiğini gözlemleyebilirsiniz.")
         except Exception as e:
             self.log_message(f"[Wireshark] Başlatılamadı: {e}")
+
+    def run_packet_loss_simulation(self):
+        """Paket kaybı simülasyonunu başlat"""
+        ip = self.target_ip_entry.get().strip()
+        if not ip:
+            messagebox.showerror("Hata", "Lütfen hedef IP girin.")
+            return
+            
+        try:
+            port = int(self.target_port_entry.get())
+            if not (0 <= port <= 65535):
+                messagebox.showerror("Hata", "Port numarası 0-65535 arasında olmalıdır.")
+                return
+                
+            loss_rate = float(self.loss_rate_entry.get()) / 100
+            max_retries = int(self.max_retries_entry.get())
+            data_size = int(self.data_size_entry.get())
+            
+            if not (0 <= loss_rate <= 1):
+                messagebox.showerror("Hata", "Kayıp oranı 0-100 arasında olmalıdır.")
+                return
+                
+            if max_retries < 1:
+                messagebox.showerror("Hata", "Maksimum deneme sayısı en az 1 olmalıdır.")
+                return
+                
+            if data_size < 1:
+                messagebox.showerror("Hata", "Test veri boyutu pozitif olmalıdır.")
+                return
+                
+        except ValueError:
+            messagebox.showerror("Hata", "Geçersiz sayısal değer.")
+            return
+            
+        def simulate():
+            self.log_message("[Paket Kaybı] Simülasyon başlatılıyor...")
+            try:
+                test_data = "X" * data_size
+                
+                from network_analysis import simulate_packet_loss_and_retransmission
+                result = simulate_packet_loss_and_retransmission(
+                    dst_ip=ip,
+                    data=test_data,
+                    port=port,  # Kullanıcının girdiği port değerini kullan
+                    loss_rate=loss_rate,
+                    max_retries=max_retries
+                )
+                
+                if result:
+                    self.log_message("[Paket Kaybı] Simülasyon başarıyla tamamlandı.")
+                else:
+                    self.log_message("[Paket Kaybı] Simülasyon başarısız oldu.")
+                    
+            except Exception as e:
+                self.log_message(f"[Paket Kaybı] Hata: {e}")
+        
+        threading.Thread(target=simulate, daemon=True).start()
 
 if __name__ == '__main__':
     root = tk.Tk()

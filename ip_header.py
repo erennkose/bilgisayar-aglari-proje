@@ -76,8 +76,7 @@ def send_udp_data(dst_ip, data, port=9999, mtu=1500, **ip_options):
         print(f"UDP gönderim hatası: {e}")
         return False
 
-def send_fragmented_data(src_ip, dst_ip, data, port=9999, mtu=1500, protocol="udp", 
-                              ttl=64, flags=0, tos=0, packet_id=None):
+def send_fragmented_data(src_ip, dst_ip, data, port=9999, mtu=1500, protocol="udp", ttl=64, flags=0, tos=0, packet_id=None):
     """
     Scapy ile düşük seviyeli paket gönderimi
     """
@@ -136,23 +135,6 @@ def send_fragmented_data(src_ip, dst_ip, data, port=9999, mtu=1500, protocol="ud
         offset += fragment_size
 
     return True
-
-def create_custom_packet(src_ip, dst_ip, src_port, dst_port, data, protocol="tcp", 
-                        ttl=64, flags=0, tos=0, packet_id=None):
-    """
-    Özel paket oluşturma - tüm IP parametreleri ile
-    """
-    ip_packet = create_ip_packet(src_ip, dst_ip, ttl=ttl, id=packet_id, flags=flags, tos=tos)
-    
-    if protocol.lower() == "tcp":
-        transport_packet = TCP(sport=src_port, dport=dst_port)
-    elif protocol.lower() == "udp":
-        transport_packet = UDP(sport=src_port, dport=dst_port)
-    else:
-        raise ValueError(f"Desteklenmeyen protokol: {protocol}")
-    
-    packet = ip_packet / transport_packet / Raw(load=data)
-    return packet
 
 def get_flag_description(flag_value):
     """
@@ -264,32 +246,6 @@ def create_ip_packet_with_custom_checksum(src_ip, dst_ip, ttl=64, id=None,
         ip_packet = IP(bytes(ip_packet))  # Rebuild ile checksum hesaplanır
     
     return ip_packet
-
-def detect_transmission_errors(packet_list):
-    """
-    Paket listesindeki transmission errorları tespit et
-    Returns: (total_packets, error_count, error_details)
-    """
-    total_packets = len(packet_list)
-    errors = []
-    error_count = 0
-    
-    for i, packet in enumerate(packet_list):
-        if packet.haslayer(IP):
-            is_valid, calc_checksum, recv_checksum = validate_ip_checksum(packet)
-            
-            if not is_valid:
-                error_count += 1
-                errors.append({
-                    'packet_index': i,
-                    'src_ip': packet[IP].src,
-                    'dst_ip': packet[IP].dst,
-                    'calculated_checksum': hex(calc_checksum) if calc_checksum else None,
-                    'received_checksum': hex(recv_checksum) if recv_checksum else None,
-                    'error_type': 'checksum_mismatch'
-                })
-    
-    return total_packets, error_count, errors
 
 def monitor_network_errors(interface=None, count=100, filter_str="ip"):
     """
