@@ -1,4 +1,5 @@
 # server.py - Dosya alıcı sunucu (TCP/UDP desteği ile)
+
 import socket
 import os
 from cryptography.hazmat.backends import default_backend
@@ -8,29 +9,38 @@ from cryptography.hazmat.primitives.asymmetric import rsa, padding as asymmetric
 from cryptography.hazmat.primitives import hashes, serialization
 
 def generate_keys():
-    # RSA anahtar çifti oluşturma
+    """
+    RSA anahtar çifti oluşturur
+    """
+    # 2048 bit RSA anahtar çifti oluşturma
     private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=2048,
+        public_exponent=65537,  # Standart RSA public exponent değeri
+        key_size=2048,          # Güvenlik için 2048 bit anahtar boyutu
         backend=default_backend()
     )
-    public_key = private_key.public_key()
+    public_key = private_key.public_key()  # Public key'i private key'den türet
     return private_key, public_key
 
 def encrypt_aes_key_with_rsa(aes_key, public_key):
-    # AES anahtarını RSA ile şifreleme
+    """
+    AES simetrik anahtarını RSA genel anahtarı ile şifreler
+    """
+    # OAEP padding ile güvenli RSA şifreleme
     encrypted_key = public_key.encrypt(
         aes_key,
         asymmetric_padding.OAEP(
-            mgf=asymmetric_padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None
+            mgf=asymmetric_padding.MGF1(algorithm=hashes.SHA256()),  # Mask Generation Function
+            algorithm=hashes.SHA256(),  # Hash algoritması
+            label=None                  # Opsiyonel etiket
         )
     )
     return encrypted_key
 
 def decrypt_aes_key_with_rsa(encrypted_key, private_key):
-    # AES anahtarını RSA ile çözme
+    """
+    RSA ile şifrelenmiş AES anahtarını çözer
+    """
+    # OAEP padding ile güvenli RSA şifre çözme
     decrypted_key = private_key.decrypt(
         encrypted_key,
         asymmetric_padding.OAEP(
@@ -41,59 +51,66 @@ def decrypt_aes_key_with_rsa(encrypted_key, private_key):
     )
     return decrypted_key
 
-# Global değişkenler
-server_running = False
-server_socket = None
+# Global değişkenler - sunucu durumunu kontrol etmek için
+server_running = False  # Sunucunun çalışma durumunu takip eder
+server_socket = None    # Aktif socket referansını tutar
 
 def start_tcp_server(ip, port):
-    """TCP sunucusu başlatır"""
+    """
+    TCP protokolü ile çalışan dosya alıcı sunucusu başlatır
+    """
     global server_running, server_socket
     
+    # TCP socket oluşturma ve yapılandırma
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind((ip, port))
-    server_socket.listen(5)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Address reuse izni
+    server_socket.bind((ip, port))     # IP ve port'a bağlanma
+    server_socket.listen(5)            # Maksimum 5 bekleyen bağlantı
     server_running = True
     print(f"TCP Sunucu başlatıldı ({ip}:{port}), bağlantı bekleniyor...")
     
-    # RSA anahtar çifti oluştur
+    # Her oturum için yeni RSA anahtar çifti oluştur
     private_key, public_key = generate_keys()
     
     try:
+        # Ana sunucu döngüsü
         while server_running:
             try:
+                # Timeout ile bağlantı kabul etme
                 server_socket.settimeout(1.0)
                 client_socket, address = server_socket.accept()
                 print(f"TCP bağlantı kabul edildi: {address}")
                 
-                # İstemciye RSA public key gönderme
+                # İstemciye RSA public key'i PEM formatında gönderme
                 pem = public_key.public_bytes(
                     encoding=serialization.Encoding.PEM,
                     format=serialization.PublicFormat.SubjectPublicKeyInfo
                 )
                 client_socket.send(pem)
                 
-                # Dosya uzantısını al
+                # İstemciden dosya uzantısı bilgisini alma
                 file_extension = client_socket.recv(32).decode().strip()
                 print(f"Dosya uzantısı alındı: {file_extension}")
                 
-                # Şifrelenmiş AES anahtarını alma
+                # RSA ile şifrelenmiş AES anahtarını alma (256 byte sabit boyut)
                 encrypted_aes_key = client_socket.recv(256)
                 aes_key = decrypt_aes_key_with_rsa(encrypted_aes_key, private_key)
                 
-                # Şifrelenmiş dosyayı alma
+                # Şifrelenmiş dosya verisini parça parça alma
                 encrypted_data = b''
                 while True:
-                    chunk = client_socket.recv(4096)
-                    if not chunk:
+                    chunk = client_socket.recv(4096)  # 4KB parçalar halinde al
+                    if not chunk:  # Veri bittiğinde döngüden çık
                         break
                     encrypted_data += chunk
 
                 print("Dosya alındı, şifre çözülüyor...")
+                # Dosyayı işleme ve kaydetme
                 process_encrypted_file(encrypted_data, aes_key, file_extension)
-                client_socket.close()
+                client_socket.close()  # İstemci bağlantısını kapat
                 
             except socket.timeout:
+                # Timeout durumunda döngüye devam et (server_running kontrol edilsin)
                 continue
             except socket.error as e:
                 if server_running:
@@ -103,70 +120,82 @@ def start_tcp_server(ip, port):
     except Exception as e:
         print(f"TCP Sunucu hatası: {e}")
     finally:
+        # Temizlik işlemleri
         if server_socket:
             server_socket.close()
         print("TCP Sunucu kapatıldı.")
 
-# UDP veri alma ve birleştirme fonksiyonunu ekleyelim
 def receive_fragmented_udp_data(server_socket, client_address, file_size):
-    chunks = {}  # Sıralı chunk'ları saklamak için dict
+    """
+    UDP ile parçalı olarak gelen veriyi sıralı şekilde birleştirir
+    """
+    chunks = {}  # Sıralı chunk'ları saklamak için sözlük (chunk_num: data)
     received_bytes = 0
-    expected_chunks = (file_size + 4000 - 1) // 4000  # Toplam chunk sayısı
+    expected_chunks = (file_size + 4000 - 1) // 4000  # Toplam chunk sayısını hesapla
     
+    # Tüm chunk'lar gelene kadar bekle
     while len(chunks) < expected_chunks:
         try:
-            server_socket.settimeout(30.0)
-            data, addr = server_socket.recvfrom(4096)
+            server_socket.settimeout(30.0)  # 30 saniye timeout
+            data, addr = server_socket.recvfrom(4096)  # Maksimum 4KB veri al
+            
+            # Sadece aynı istemciden gelen verileri kabul et
             if addr == client_address:
-                # Chunk numarasını ayır
+                # Chunk formatı: "chunk_num:data"
                 separator_index = data.index(b':')
-                chunk_num = int(data[:separator_index])
-                chunk_data = data[separator_index + 1:]
+                chunk_num = int(data[:separator_index])  # Chunk numarasını ayır
+                chunk_data = data[separator_index + 1:]  # Asıl veriyi ayır
                 
-                chunks[chunk_num] = chunk_data
+                chunks[chunk_num] = chunk_data  # Chunk'ı sözlüğe ekle
                 received_bytes += len(chunk_data)
+                
         except socket.timeout:
-            continue
+            continue  # Timeout durumunda beklemeye devam et
     
-    # Chunk'ları sırayla birleştir
+    # Chunk'ları sıra numarasına göre birleştir
     return b''.join(chunks[i] for i in sorted(chunks.keys()))
 
-# UDP sunucu fonksiyonunu güncelle
 def start_udp_server(ip, port):
-    """UDP sunucusu başlatır ve parçalı dosya alımını yönetir"""
+    """
+    UDP protokolü ile çalışan dosya alıcı sunucusu başlatır
+    Parçalı dosya transferini destekler
+    """
     global server_running, server_socket
     
+    # UDP socket oluşturma ve yapılandırma
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     server_socket.bind((ip, port))
-    server_socket.settimeout(30.0)  # Zaman aşımı ekle
+    server_socket.settimeout(30.0)  # Genel timeout ayarı
     server_running = True
     print(f"UDP Sunucu başlatıldı ({ip}:{port}), veri bekleniyor...")
     
-    # RSA anahtar çifti oluştur
+    # Her oturum için yeni RSA anahtar çifti oluştur
     private_key, public_key = generate_keys()
     
     try:
+        # Ana sunucu döngüsü
         while server_running:
             try:
-                # İlk paket: public key isteği
+                # İlk paket: public key isteği bekleme
                 data, client_address = server_socket.recvfrom(1024)
+                
                 if data == b"REQUEST_PUBLIC_KEY":
                     print(f"UDP istemci bağlandı: {client_address}")
                     
-                    # Public key gönderme
+                    # Public key'i PEM formatında hazırla
                     pem = public_key.public_bytes(
                         encoding=serialization.Encoding.PEM,
                         format=serialization.PublicFormat.SubjectPublicKeyInfo
                     )
                     
-                    # PEM'i parçalara böl
-                    chunk_size = 1400
+                    # PEM verisini UDP paket boyutu sınırı için parçalara böl
+                    chunk_size = 1400  # UDP için güvenli boyut
                     chunks = [pem[i:i+chunk_size] for i in range(0, len(pem), chunk_size)]
                     
-                    # Chunk sayısını gönder
+                    # Önce toplam chunk sayısını gönder
                     server_socket.sendto(str(len(chunks)).encode(), client_address)
                     
-                    # Her chunk'ı gönder
+                    # Her chunk'ı sıra numarası ile birlikte gönder
                     for i, chunk in enumerate(chunks):
                         server_socket.sendto(f"{i}:".encode() + chunk, client_address)
                     
@@ -174,11 +203,11 @@ def start_udp_server(ip, port):
                     file_extension, _ = server_socket.recvfrom(32)
                     file_extension = file_extension.decode().strip()
                     
-                    # Şifrelenmiş AES anahtarını alma
+                    # Şifrelenmiş AES anahtarını al
                     encrypted_aes_key, _ = server_socket.recvfrom(512)
                     aes_key = decrypt_aes_key_with_rsa(encrypted_aes_key, private_key)
                     
-                    # Dosya boyutunu alma
+                    # Dosya boyutu bilgisini al
                     file_size_data, _ = server_socket.recvfrom(1024)
                     file_size = int(file_size_data.decode())
                     
@@ -192,7 +221,7 @@ def start_udp_server(ip, port):
                         print("Veri alımı başarısız!")
                 
             except socket.timeout:
-                continue
+                continue  # Timeout durumunda döngüye devam et
             except socket.error as e:
                 if server_running:
                     print(f"UDP Socket hatası: {e}")
@@ -201,36 +230,42 @@ def start_udp_server(ip, port):
     except Exception as e:
         print(f"UDP Sunucu hatası: {e}")
     finally:
+        # Temizlik işlemleri
         if server_socket:
             server_socket.close()
         print("UDP Sunucu kapatıldı.")
 
 def process_encrypted_file(encrypted_data, aes_key, file_extension="txt"):
-    """Şifrelenmiş dosyayı çözer ve bulunduğumuz konuma kaydeder"""
+    """
+    Şifrelenmiş dosyayı AES ile çözer ve mevcut dizine kaydeder
+    """
     try:
-        # Şifre çözme
-        iv = encrypted_data[:16] 
-        ciphertext = encrypted_data[16:]
+        # AES-CBC şifre çözme işlemi
+        iv = encrypted_data[:16]   # İlk 16 byte IV (Initialization Vector)
+        ciphertext = encrypted_data[16:]  # Geri kalan kısım şifrelenmiş veri
 
+        # AES decryptor oluşturma
         decryptor = Cipher(
-            algorithms.AES(aes_key),
-            modes.CBC(iv),
+            algorithms.AES(aes_key),    # AES algoritması
+            modes.CBC(iv),              # CBC modu ile IV
             backend=default_backend()
         ).decryptor()
 
+        # PKCS7 padding çözücü oluşturma
         unpadder = padding.PKCS7(128).unpadder()
 
+        # Şifre çözme işlemi
         decrypted_padded = decryptor.update(ciphertext) + decryptor.finalize()
         decrypted_data = unpadder.update(decrypted_padded) + unpadder.finalize()
 
-        # Bulunduğumuz konumu al
-        current_dir = os.getcwd()
+        # Dosya kaydetme işlemleri
+        current_dir = os.getcwd()  # Mevcut çalışma dizinini al
         
-        # Benzersiz dosya adı oluştur
+        # Benzersiz dosya adı oluşturmak için timestamp kullan
         import time
         timestamp = int(time.time())
         
-        # Uzantıyı düzelt
+        # Dosya uzantısını düzenle (nokta ile başlamazsa ekle)
         if not file_extension.startswith('.'):
             file_extension = '.' + file_extension
             
@@ -238,31 +273,30 @@ def process_encrypted_file(encrypted_data, aes_key, file_extension="txt"):
         filename = f"received_file_{timestamp}{file_extension}"
         full_path = os.path.join(current_dir, filename)
         
-        # Dosyayı kaydetme
+        # Dosyayı binary modda kaydet
         with open(full_path, "wb") as f:
             f.write(decrypted_data)
 
+        # Başarı mesajları
         print(f"Dosya başarıyla kaydedildi: {full_path}")
         print(f"Dosya boyutu: {len(decrypted_data)} bytes")
         
         return full_path
         
     except Exception as e:
+        # Hata durumunda detaylı bilgi ver
         print(f"Dosya işleme hatası: {e}")
         import traceback
-        traceback.print_exc()
+        traceback.print_exc()  # Stack trace yazdır
         return None
 
 def start_server(ip="localhost", port=8080, protocol="tcp"):
-    """Sunucuyu belirtilen protokol ile başlatır
-    
-    Args:
-        ip (str): Sunucu IP adresi (varsayılan: localhost)
-        port (int): Port numarası (varsayılan: 8080)
-        protocol (str): Protokol türü - 'tcp' veya 'udp' (varsayılan: tcp)
     """
-    protocol = protocol.lower()
+    Sunucuyu belirtilen protokol ile başlatır
+    """
+    protocol = protocol.lower()  # Büyük/küçük harf duyarsız karşılaştırma
     
+    # Protokol türüne göre uygun sunucuyu başlat
     if protocol == "tcp":
         start_tcp_server(ip, port)
     elif protocol == "udp":
@@ -272,27 +306,23 @@ def start_server(ip="localhost", port=8080, protocol="tcp"):
         return
 
 def stop_server():
-    """Sunucuyu güvenli bir şekilde durdurur"""
+    """
+    Çalışan sunucuyu güvenli bir şekilde durdurur
+    Global değişkenleri sıfırlar ve socket'i kapatır
+    """
     global server_running, server_socket
     
+    # Sunucu zaten çalışmıyorsa uyarı ver
     if not server_running:
         print("Sunucu zaten çalışmıyor.")
         return
     
     print("Sunucu durduruluyor...")
-    server_running = False
+    server_running = False  # Ana döngüleri durdur
     
-    # Socket'i kapatma
+    # Socket'i güvenli şekilde kapat
     if server_socket:
         try:
             server_socket.close()
         except:
-            pass
-
-# 192.168.1.3 --> Server IP --> 192.168.56.1
-
-# python main.py client --file gonderen_dosya.txt --ip 192.168.56.1
-# python main.py analyze --analyze latency --ip 8.8.8.8
-# python main.py analyze --analyze bandwidth --ip 192.168.56.1
-# python main.py analyze --analyze packet_loss --loss 10
-# python main.py analyze --analyze security --ip 192.168.1.100 --interface eth0
+            pass  # Kapanırken hata olursa göz ardı et

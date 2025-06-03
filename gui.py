@@ -5,7 +5,7 @@ import os
 import subprocess
 from client import start_client
 from server import start_server, stop_server, server_running, server_socket
-from network_analysis import measure_latency, run_iperf_client
+from network_analysis import measure_latency, run_iperf_client, simulate_packet_loss_and_retransmission
 from security_analysis import SecurityAnalyzer
 from ip_header import send_fragmented_data, monitor_network_errors, test_checksum_manipulation, validate_ip_checksum
 
@@ -270,7 +270,7 @@ class SecureTransferGUI:
         self.target_ip_entry = tk.Entry(ip_frame, width=20, font=("Arial", 10))
         self.target_ip_entry.pack(side=tk.LEFT, padx=(10, 0))
 
-        # Port girişi - YENİ
+        # Port girişi
         port_frame = tk.Frame(target_frame)
         port_frame.pack(fill=tk.X, padx=10, pady=5)
         tk.Label(port_frame, text="Port:", width=15, anchor='w').pack(side=tk.LEFT)
@@ -361,6 +361,8 @@ class SecureTransferGUI:
         
         tk.Button(external_buttons_frame, text="Wireshark Başlat", command=self.start_wireshark, width=18, bg="lightpink").pack(side=tk.LEFT)
 
+    # Input-handling fonksiyonları
+
     def clear_output(self):
         """Çıktı alanını temizle"""
         self.output_text.delete(1.0, tk.END)
@@ -441,7 +443,7 @@ class SecureTransferGUI:
         threading.Thread(target=send, daemon=True).start()
 
     def send_with_ip_header(self):
-        """IP header ile dosya gönderimi - Gelişmiş parametrelerle"""
+        """IP header ile dosya gönderimi"""
         ip = self.client_ip_entry.get().strip()
         file_path = self.file_entry.get().strip()
         port = self.client_port_entry.get().strip()
@@ -452,7 +454,7 @@ class SecureTransferGUI:
         tos = self.tos_entry.get().strip()
         src_ip = self.src_ip_entry.get().strip()
 
-        # Kontrol
+        # Kontroller
         if not ip or not file_path:
             messagebox.showerror("Hata", "Lütfen IP adresi ve dosya seçin.")
             return
@@ -499,7 +501,7 @@ class SecureTransferGUI:
                 self.log_message(f"Flags: {self.get_flag_description(flags)}")
                 self.log_message(f"Dosya boyutu: {len(data)} byte")
                 
-                # ip_header.py'deki güncellenmiş fonksiyonu çağır
+                # ip_header.py'daki send_fragmented_data fonksiyonunu çağır
                 success = send_fragmented_data(
                     src_ip=src_ip,
                     dst_ip=ip,
@@ -530,7 +532,7 @@ class SecureTransferGUI:
         fragment_size = self.fragment_size_entry.get().strip()
         protocol = self.client_protocol_var.get()
 
-        # Kontrol
+        # Kontroller
         if not ip or not file_path:
             messagebox.showerror("Hata", "Lütfen IP adresi ve dosya seçin.")
             return
@@ -558,7 +560,7 @@ class SecureTransferGUI:
                 self.log_message(f"Dosya boyutu: {len(data)} byte")
                 self.log_message(f"Toplam parça sayısı: {(len(data) + fragment_size - 1) // fragment_size}")
                 
-                # ip_header.py'deki güncellenmiş fonksiyonu çağır
+                # ip_header.py'daki send_fragmented_data fonksiyonunu çağır
                 success = send_fragmented_data(
                     src_ip=None,  # Otomatik IP seçimi
                     dst_ip=ip,
@@ -582,7 +584,7 @@ class SecureTransferGUI:
         threading.Thread(target=send_file, daemon=True).start()
 
     def run_checksum_analysis(self):
-        """IP checksum analizi ve test"""
+        """IP checksum analizi ve testi"""
         def analyze():
             self.log_message("[Checksum] IP checksum analiz ve test başlatılıyor...")
             try:
@@ -598,8 +600,8 @@ class SecureTransferGUI:
                 is_valid_normal, calc_normal, recv_normal = validate_ip_checksum(normal_packet)
                 is_valid_corrupted, calc_corrupted, recv_corrupted = validate_ip_checksum(corrupted_packet)
                 
-                self.log_message(f"Normal paket geçerli: {'✅ EVET' if is_valid_normal else '❌ HAYIR'}")
-                self.log_message(f"Bozuk paket geçerli: {'✅ EVET' if is_valid_corrupted else '❌ HAYIR'}")
+                self.log_message(f"Normal paket geçerli: {'EVET' if is_valid_normal else 'HAYIR'}")
+                self.log_message(f"Bozuk paket geçerli: {'EVET' if is_valid_corrupted else 'HAYIR'}")
                 
                 self.log_message("[Checksum] Analiz tamamlandı.")
                 
@@ -613,8 +615,7 @@ class SecureTransferGUI:
         def detect():
             self.log_message("[Hata Tespiti] Ağ trafiği izleniyor...")
             try:
-                # Windows için interface belirleme
-                interface = None  # Otomatik seçim
+                interface = None  # Otomatik interface seçimi
                 
                 self.log_message("50 paket yakalanacak ve checksum hataları aranacak...")
                 self.log_message("Bu işlem birkaç dakika sürebilir...")
@@ -629,7 +630,7 @@ class SecureTransferGUI:
                 # Sonuçları özetle
                 if error_packets:
                     self.log_message(f"   {len(error_packets)} checksum hatası tespit edildi!")
-                    for i, error in enumerate(error_packets[:5]):  # İlk 5 hatayı göster
+                    for i, error in enumerate(error_packets[:5]):
                         self.log_message(f"  {i+1}. {error['src_ip']} -> {error['dst_ip']} "
                                     f"(Hesaplanan: {error['calculated_checksum']}, "
                                     f"Alınan: {error['received_checksum']})")
@@ -699,7 +700,7 @@ class SecureTransferGUI:
 
 
     def run_mitm_simulation(self):
-        """Gelişmiş MITM simülasyonu"""
+        """MITM simülasyonu"""
         victim_ip = self.target_ip_entry.get().strip()
         if not victim_ip:
             messagebox.showerror("Hata", "Lütfen hedef (kurban) IP girin.")
@@ -737,7 +738,7 @@ class SecureTransferGUI:
             try:
                 results = self.security_analyzer.packet_injection_detection(ip, 80)
                 
-                # Tespit sonuçlarını logla
+                # Tespit sonuçlarını loglama kısmı
                 detection_count = sum(results.values())
                 self.log_message(f"TCP Sequence Analizi: {'ŞÜPHELI' if results['sequence_analysis'] else 'NORMAL'}")
                 self.log_message(f"Checksum Doğrulama: {'ŞÜPHELI' if results['checksum_validation'] else 'NORMAL'}")
@@ -805,7 +806,7 @@ class SecureTransferGUI:
                 
                 self.log_message(f"Güvenlik Notu: {grade}")
                 
-                # Kısa özet
+                # Kısa güvenlik raporu özeti
                 self.log_message(f"Şifreleme Durumu: {'Güvenli' if report['encryption']['is_encrypted'] else 'Risk'}")
                 self.log_message(f"MITM Tespiti: {'Risk' if report['mitm_detection']['mitm_detected'] else 'Güvenli'}")
                 
@@ -865,11 +866,10 @@ class SecureTransferGUI:
             try:
                 test_data = "X" * data_size
                 
-                from network_analysis import simulate_packet_loss_and_retransmission
                 result = simulate_packet_loss_and_retransmission(
                     dst_ip=ip,
                     data=test_data,
-                    port=port,  # Kullanıcının girdiği port değerini kullan
+                    port=port,
                     loss_rate=loss_rate,
                     max_retries=max_retries
                 )
